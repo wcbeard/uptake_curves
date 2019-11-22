@@ -44,6 +44,7 @@ dependencies:
 - pip
 #- pymc3
 - pip:
+  - "git+https://github.com/mozilla/dscontrib.git"
   - autopep8
   - black
   - feather-format
