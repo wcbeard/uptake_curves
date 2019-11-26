@@ -86,27 +86,55 @@ def maj_vers(vers: str) -> int:
     majv, *_ = vers.split(".")
     return int(majv)
 
+
 def pull_bh_data_rls(min_build_date):
-    recent_rls_filter = lambda v: maj_vers(v) in [cur_rls_maj - 2, cur_rls_maj - 1, cur_rls_maj]
+    recent_rls_filter = lambda v: maj_vers(v) in [
+        cur_rls_maj - 2,
+        cur_rls_maj - 1,
+        cur_rls_maj,
+    ]
     rls_docs = bh.pull_build_id_docs(min_build_day=min_build_date, channel="release")
     return bh.version2df(
         rls_docs, major_version=recent_rls_filter, keep_rc=False, keep_release=True
-    ).assign(chan='release')
+    ).assign(chan="release")
+
 
 def pull_bh_data_beta(min_build_date):
     recent_betas_filter = lambda v: maj_vers(v) in [cur_rls_maj, cur_rls_maj + 1]
     beta_docs = bh.pull_build_id_docs(min_build_day=min_build_date, channel="beta")
     return bh.version2df(
         beta_docs, major_version=recent_betas_filter, keep_rc=False, keep_release=True
-    ).assign(chan='beta')
+    ).assign(chan="beta")
+
+
 
 buildhub_data_rls = pull_bh_data_rls(min_build_date)
 buildhub_data_beta = pull_bh_data_beta(min_build_date)
 
 bh_data = pd.concat([buildhub_data_rls, buildhub_data_beta], ignore_index=True)
+assert (
+    bh_data.groupby([c.build_id, "pub_date"])
+    .size()
+    .reset_index(drop=0)
+    .groupby(c.build_id)
+    .size()
+    .eq(1)
+    .all()
+), "There's not a 1-1 mapping between build_id and pub_date!"
+
 
 # %%
-buildhub_data_rls[:3]
+def check_1to1_mapping(s1, s2):
+    dmap = dict(zip(s1, s2))
+    s2_should_be = s1.map(dmap)
+    ne = s2_should_be != s2
+    
+    assert ne.sum() == 0, 'Not 1-1 mapping!'
+    
+check_1to1_mapping(bh_data.build_id, bh_data.disp_vers)
+
+# %%
+buildhub_data_rls[:]
 
 # %% [markdown]
 # # Load clients_daily
@@ -115,12 +143,21 @@ buildhub_data_rls[:3]
 import data.queries as qs
 
 
-# %%
 @mem.cache
 def bq_read_cache(*a, **k):
     return bq_read(*a, **k)
 
-dfa_ = bq_read_cache(qs.allq.format(min_build_id=20190601))
+
+def sub_days_null(s1, s2, fillna=None):
+    diff = s1 - s2
+    not_null = diff.notnull()
+    nn_days = diff[not_null].astype("timedelta64[D]").astype(int)
+    diff.loc[not_null] = nn_days
+    return diff
+
+
+dfa_ = bq_read_cache(qs.allq.format(min_sub_date="2019-07-01", min_build_id=20190601))
+print(len(dfa_))
 
 
 # %%
@@ -139,15 +176,246 @@ def join_bh_cdaily(cdaily_df, bh_data):
     assert len(cdaily_df2) == len(cdaily_df), "Duplicate rows in bh_data?"
     return cdaily_df2
 
-dfa = join_bh_cdaily(dfa_, bh_data).assign(same_dv=lambda x: x.dvers == x.bh_dvers)
+dfa = join_bh_cdaily(dfa_, bh_data).assign(same_dv=lambda x: x.dvers == x.bh_dvers).assign(
+    day_chan_os_sum = lambda x: x.groupby(['submission_date', 'chan', 'os']).n.transform('sum')
+)
+dfa['days_post_pub'] = sub_days_null(dfa.submission_date, dfa.bh_pub_date)
+
+assert dfa.days_post_pub.min() >= -1, "We shouldn't get submissions before it's published"
+print(len(dfa))
+
+
+# %% [markdown]
+# ## Prototype 'release' plots
+# - choices: restrict build_id to n days later?
+#     - but we want it in the denominator
+#     
+# - days till next release
+# - sometimes buildhub publish date is several days before it actually goes out
+#     - we'll have to use heuristics :(
+#     - additionally, filter out 'previous' versions so as to not plot their rise
+#         - ideas: buildid needs to be not too long ago?
+#             - this will require knowledge of the plotting window
 
 # %%
-dfa[:3]
+# _cand = dfr.query("bid > '20190701' & os == 'Windows_NT'")
+# _cand.bh_pub_date.isnull().mean()
+# _cand.groupby(_cand.bh_pub_date.isnull()).n.sum()
+# _cand
+
+# %%
+def is_major(vers: Series):
+    return vers.str.count(r"\.").eq(1)
+
+
+dfr = (
+    dfa.query("chan == 'release'")
+    .sort_values(
+        ["bh_pub_date", "submission_date", "chan", "os", "bid", "vers"], ascending=True
+    )
+    .reset_index(drop=1)
+    .assign(major=lambda x: is_major(x.vers))
+)
+
+
+# %% [markdown]
+# #### First, Windows
+
+# %%
+def order_bids(bids):
+    return "\n".join(bids)
+
+
+def arr_itg(n):
+    def f(srs):
+        return srs.values[n]
+
+    return f
+
+
+def get_vers_first_day_above_n_perc_mapping(df, min_pct=0.01):
+    df = df[["n_pct", "submission_date", "vers"]]
+    return df.query("n_pct > @min_pct").groupby("vers").submission_date.min().to_dict()
+
+
+# %%
+def format_os_df_plot(os_df):
+    """
+    - contains data for single os & channel
+    - collapse all build_id's into single version
+    """
+    _cs_sort = ["vers", "submission_date", "n"]
+    _cs_sort_all = _cs_sort + ["bid", "bh_pub_date", "day_chan_os_sum"]
+    latest_version = (
+        os_df[["bid", "vers"]]
+        .drop_duplicates()
+        .sort_values(by=["bid"], ascending=False)
+        .vers.iloc[0]
+    )
+
+    gb = (
+        os_df[_cs_sort_all]
+        .sort_values(_cs_sort, ascending=[True, True, False])
+        .assign(
+            bids=lambda x: x.bid,
+            vers_pub_date=lambda x: x.groupby(["vers"]).bh_pub_date.transform("min"),
+            day_chan_os_sum_min=lambda x: x.day_chan_os_sum,
+        )
+        .groupby(["vers", "submission_date"], sort=False)
+    )
+
+    pdf = (
+        gb.agg(
+            {
+                "bids": order_bids,
+                "n": "sum",
+                "day_chan_os_sum": "max",
+                "day_chan_os_sum_min": "min",
+            }
+        )
+        .reset_index(drop=0)
+        .assign(
+            n_pct=lambda x: x.n / x.day_chan_os_sum,
+            latest_vers=lambda x: x.vers.eq(latest_version),
+            is_major=lambda x: is_major(x.vers),
+        )
+        .assign(
+            vers_min_sday_npct=lambda x: x.vers.map(
+                get_vers_first_day_above_n_perc_mapping(x, 0.01)
+            )
+        )
+        .assign(
+            days_post_pub=lambda x: sub_days_null(
+                x.submission_date, x.vers_min_sday_npct
+            )
+        )
+    )
+
+    assert pdf.eval(
+        "day_chan_os_sum_min == day_chan_os_sum"
+    ).all(), "hopefully single values at level of grouping"
+    return pdf
+
+
+min_plottable_bid = bh_data.query("chan == 'release'").build_id.min()
+pdf = format_os_df_plot(os_df.query("bid >= @min_plottable_bid"))
+
+
+# %%
+def os_plot_base(df, color="vers:O", separate=False):
+    version_opacity = A.Opacity(
+        "latest_vers:O", scale=A.Scale(domain=[True, False], range=[1, 0.6])
+    )
+    major_shape = A.Shape(
+        "is_major", scale=A.Scale(domain=[True, False], range=['square', "triangle-up"])
+    )
+    h = (
+        Chart(df.query("days_post_pub <= 14 & days_post_pub > -2"))
+        .mark_line(strokeDash=[5, 2])  # , strokeOpacity=.6
+        .encode(
+            x=A.X("days_post_pub", axis=A.Axis(title="Days after release")),
+            y=A.Y("n_pct", axis=A.Axis(format="%", title="Percent uptake")),
+            strokeOpacity=version_opacity,  #'latest_vers:O',
+            color="vers:O",
+            shape=major_shape,
+            tooltip=[
+                "vers",
+                "days_post_pub",
+                "submission_date",
+                "vers_min_sday_npct",
+                "bids",
+            ],
+        )
+    )
+    if separate:
+        return h, h.mark_point()
+    return h + h.mark_point()
+
+
+p_all = os_plot_base(pdf, color="vers:O")
+p_all.interactive()
+
+# %%
+rls_plots = {}
+min_plottable_bid = bh_data.query("chan == 'release'").build_id.min()
+
+
+def os_plot(os_name, os_df):
+    pdf = format_os_df_plot(os_df.query("bid >= @min_plottable_bid"))
+    p_all = os_plot_base(pdf, color="vers:O").properties(title=f"OS={os_name}")
+    return p_all
+
+for os, os_df in dfr.groupby("os"):
+    rls_plots[os] = os_plot(os, os_df)
+
+rls_plots["Windows_NT"]
+
+# %%
+release_row = rls_plots["Windows_NT"] | rls_plots["Darwin"] | rls_plots["Linux"]
+release_row
+
+# %%
+[
+    for (bid, pubdate, os), gdf in os_df.groupby(['bid', c.bh_pub_date, 'os'])
+    for os, os_df in dfr.groupby('os')
+]
+
+# %%
+for os, os_df in dfr.groupby('os'):
+    for (bid, pubdate, os), gdf in os_df.groupby(['bid', c.bh_pub_date, 'os']):
+        gdf.set_index('days_post_pub').eval('n / day_chan_os_sum').plot(style='o-')
+        print(os)
+    #     break
+    #     if gdf.n.sum() < 1e3:
+    #         continue
+    if os == 'Windows_NT':
+        break
+
+# %%
+for (bid, pubdate, os), gdf in dfr.groupby(['bid', c.bh_pub_date, 'os']):
+    print(os)
+#     break
+#     if gdf.n.sum() < 1e3:
+#         continue
+    if os == 'Windows_NT':
+        break
+
+# %%
+gdf
+
+# %%
+gdf.set_index('days_post_pub').eval('n / day_chan_os_sum').plot(style='o-')
+
+# %%
+
+# %%
+gdf
+
+# %%
+
+# %%
+gdf
+
+# %%
+dfr.groupby(['bid', c.bh_pub_date]).n.sum()
+
+# %%
+dfa.groupby(['bh_pub_date', 'chan', 'os', 'vers', 'bid', 'submission_date']).n.sum()
+
+# %%
+# min_dates = dfa.groupby(['same_dv', 'chan', 'os', 'vers'])[[c.submission_date, c.bh_pub_date]].min().reset_index(drop=0)
+# min_dates.to_csv('/tmp/x.csv')
+# # !open '/tmp/x.csv'
+
+# %%
 
 # %%
 dfa.groupby(['chan', 'os', 'same_dv']).n.sum().unstack().fillna(0).astype(int).assign(
      Perctrue=lambda x: x[True].div(x[True] + x[False]).mul(100).round(2),
  )
+
+# %%
+dfa.groupby('bh_pub_date').n.sum()
 
 # %%
 dfa.query("chan == 'release'")[:3]

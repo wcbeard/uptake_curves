@@ -35,7 +35,7 @@ where (
 --        (submission_date between '2019-07-09' and '2019-07-20') OR
 --        (submission_date between '2019-09-01' and '2019-09-14') OR
 --        (submission_date between '2019-09-17' and '2019-09-30') OR
-       (submission_date between '2019-10-01' and '2019-10-07')
+       (submission_date between '{min_sub_date}' and '2019-10-07')
        )
       and sample_id = 1
       and os in ('Windows_NT', 'Darwin', 'Linux')
