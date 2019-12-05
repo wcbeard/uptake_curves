@@ -58,6 +58,7 @@ dependencies:
   - pytest
   - sqlitedict
   - toolz
+  - ipdb
 
   # DL
   # - keras

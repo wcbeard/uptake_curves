@@ -76,6 +76,22 @@ min_build_date = get_min_build_date(days_ago=150)
 
 print(min_build_date, cur_rls_maj)
 
+# %%
+import data.queries as qs
+
+
+@mem.cache
+def bq_read_cache(*a, **k):
+    return bq_read(*a, **k)
+
+
+def sub_days_null(s1, s2, fillna=None):
+    diff = s1 - s2
+    not_null = diff.notnull()
+    nn_days = diff[not_null].astype("timedelta64[D]").astype(int)
+    diff.loc[not_null] = nn_days
+    return diff
+
 
 # %% [markdown]
 # ## Buildhub
@@ -137,23 +153,54 @@ check_1to1_mapping(bh_data.build_id, bh_data.disp_vers)
 buildhub_data_rls[:]
 
 # %% [markdown]
+# # How far back should build_id's go?
+
+# %%
+bdf = bq_read_cache(qs.pull_min('2019-09-01')).assign(bidd=lambda x: pd.to_datetime(x.bid).dt.round('d'))
+bdf['chan_os_bid_n'] = bdf.groupby(['chan', 'os']).n.transform('sum')
+
+len(bdf)
+
+# %% {"jupyter": {"outputs_hidden": true}}
+bdf
+
+# %% {"jupyter": {"outputs_hidden": true}}
+bdf.n / bdf.chan_os_bid_n
+
+# %%
+# esr = bdf.query("chan == 'esr'").groupby('bid').n.sum()
+esr = bdf.query("chan == 'release' & os == 'Linux'").groupby('bid').n.sum()
+esr
+
+# %%
+bdf.groupby(["chan", "os"]).bidd.min().unstack().fillna(0)
+
+# %%
+nr_ = 4
+nc = 3
+all_splts, spi = mu.mk_sublots(
+    nrows=nr_, ncols=nc, figsize=(nc * 8, nr_ * 8), sharey='row', sharex='row'
+)
+
+for (chan, os), gdf in (
+    bdf #.query("submission_date == '2019-07-06'")
+    .groupby(["chan", "os", "bidd"])
+    .n.sum()
+    .reset_index(drop=0)
+    .groupby(["chan", "os"])
+):
+    ax = spi.n
+    plt.title(f"{chan}: {os}")
+    cdf = gdf.set_index("bidd").n.cumsum().pipe(lambda x: x / x.max())
+    cdf.plot(ax=ax)
+#     break
+plt.tight_layout()
+
+# %% [markdown]
 # # Load clients_daily
 
 # %%
-import data.queries as qs
 
-
-@mem.cache
-def bq_read_cache(*a, **k):
-    return bq_read(*a, **k)
-
-
-def sub_days_null(s1, s2, fillna=None):
-    diff = s1 - s2
-    not_null = diff.notnull()
-    nn_days = diff[not_null].astype("timedelta64[D]").astype(int)
-    diff.loc[not_null] = nn_days
-    return diff
 
 
 dfa_ = bq_read_cache(qs.allq.format(min_sub_date="2019-07-01", min_build_id=20190601))
@@ -180,9 +227,38 @@ dfa = join_bh_cdaily(dfa_, bh_data).assign(same_dv=lambda x: x.dvers == x.bh_dve
     day_chan_os_sum = lambda x: x.groupby(['submission_date', 'chan', 'os']).n.transform('sum')
 )
 dfa['days_post_pub'] = sub_days_null(dfa.submission_date, dfa.bh_pub_date)
+dfa['bidd'] = dfa.bid.pipe(pd.to_datetime).dt.round('d')
 
 assert dfa.days_post_pub.min() >= -1, "We shouldn't get submissions before it's published"
 print(len(dfa))
+
+# %%
+dfa.groupby(c.submission_date).size()
+
+# %%
+dfa.chan.drop_duplicates()
+
+# %%
+dfa.os.drop_duplicates()
+
+# %%
+
+# %%
+nr_ = 4; nc = 3
+all_splts, spi = mu.mk_sublots(nrows=nr_, ncols=nc, figsize=(nc * 8, nr_ * 8), sharey=True, sharex=True)
+
+for (chan, os), gdf in dfa.query("submission_date == '2019-07-06'").groupby(['chan', 'os', 'bidd']).n.sum().reset_index(drop=0).groupby(['chan', 'os']):
+    ax = spi.n
+    plt.title(f"{chan}: {os}")
+    cdf = gdf.set_index('bidd').n.cumsum().pipe(lambda x: x / x.max())
+    cdf.plot()
+#     break
+
+# %%
+dfa.query("chan == 'beta'").query("n > 5_000").sort_values(["n"], ascending=True)
+
+# %%
+dfa.query("chan == 'beta'").n.pipe(np.log10).hist(bins=100, density=0, alpha=.5)
 
 
 # %% [markdown]
