@@ -1,3 +1,4 @@
+import bq_utils as bq
 import fire
 from bq_utils import BqLocation, drop_table, mk_bq_reader, upload
 from google.cloud import bigquery  # noqa
@@ -9,6 +10,11 @@ def download_version_counts(bq_read, sub_date_start, sub_date_end=None):
     q = pull_min(day1=sub_date_start, day_end=sub_date_end)
     res = bq_read(q)
     return res
+
+
+def check_dates_exists(sub_date_start, sub_date_end):
+    bq.check_sub_date_format([sub_date_start, sub_date_end])
+    pd.date_range(sub_date_start, sub_date_end, freq='D')
 
 
 def main(

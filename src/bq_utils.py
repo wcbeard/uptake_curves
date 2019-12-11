@@ -1,8 +1,10 @@
 import os
+import re
 import subprocess
 import tempfile
 from functools import partial
 from os.path import abspath, exists, expanduser
+from typing import Iterable
 
 import numpy as np
 import pandas as pd
@@ -24,8 +26,7 @@ class BqLocation:
 
     @property
     def sql(self):
-        return "`{}`.{}.{}".format(self.project_id, self.dataset, self.table)
-        # return f"`{self.project_id}`.{self.dataset}.{self.table}"
+        return f"`{self.project_id}`.{self.dataset}.{self.table}"
 
     @property
     def cli(self):
@@ -34,6 +35,13 @@ class BqLocation:
     @property
     def no_proj(self):
         return "{}.{}".format(self.dataset, self.table)
+
+    @property
+    def sql_dataset(self):
+        return f"`{self.project_id}`.{self.dataset}"
+
+    def __repr__(self):
+        return f"BqLocation[{self.cli}]"
 
 
 def get_creds(creds_loc=None):
@@ -86,6 +94,30 @@ def cache_reader(bq_read):
     return bq_read_cache
 
 
+def mk_query_func(creds_loc=None):
+    """
+    This function will block until the job is done...and
+    take a while if a lot of queries are repeatedly made.
+    """
+    creds = get_creds(creds_loc=creds_loc)
+    client = bigquery.Client(project=creds.project_id, credentials=creds)
+
+    def blocking_query(*a, **k):
+        job = client.query(*a, **k)
+        for i in job:
+            break
+        assert job.done(), "Uh oh, job not done??"
+        return job
+
+    return blocking_query
+
+
+def mk_query_func_async(creds_loc=None):
+    creds = get_creds(creds_loc=creds_loc)
+    client = bigquery.Client(project=creds.project_id, credentials=creds)
+    return client.query
+
+
 def run_command(cmd, success_msg="Success!"):
     """
     @cmd: List[str]
@@ -107,13 +139,7 @@ def run_command(cmd, success_msg="Success!"):
 
 
 def drop_table(location: BqLocation):
-    cmd = [
-        "bq",
-        "rm",
-        "-f",
-        "-t",
-        location.cli
-    ]
+    cmd = ["bq", "rm", "-f", "-t", location.cli]
     print("running command", cmd)
     run_command(cmd, "Success! Table {} dropped.".format(location.cli))
 
@@ -172,3 +198,13 @@ def get_schema(df, as_str=False, **override):
         return dtype_srs
     res = ",".join(["{}:{}".format(c, t) for c, t in dtype_srs.items()])
     return res
+
+
+def check_sub_date_format(dates: Iterable[str]):
+    "Ensure `dates` are strings with date formate `YYYY-dd-mm`"
+    date_fmt_re = re.compile(r"\d{4}-\d{2}-\d{2}")
+    date_srs = Series(dates)
+    if not date_srs.map(type).pipe(set) == {str}:
+        raise ValueError("Dates passed aren't strings")
+    if not date_srs.map(date_fmt_re.match).astype(bool).all():
+        raise ValueError("Date do not follow `YYYY-dd-mm` pattern")
