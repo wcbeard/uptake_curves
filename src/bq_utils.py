@@ -12,6 +12,8 @@ from google.cloud import bigquery  # noqa
 from google.oauth2 import service_account  # noqa
 from pandas import Series
 
+SUB_DATE = "%Y-%m-%d"
+
 
 class BqLocation:
     def __init__(

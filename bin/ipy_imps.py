@@ -16,6 +16,7 @@ from pandas import Series
 
 query_func = bq.mk_query_func()
 bq_loc = bq.BqLocation("wbeard_uptake_vers")
+pd.options.display.min_rows = 30
 
 # df = pd.read_csv("data/samp/samp.csv")
 
@@ -24,8 +25,11 @@ lange = z.compose(list, range)
 lilter = z.compose(list, filter)
 lip = z.compose(list, zip)
 
-sub_date_start = "2019-12-04"
-sub_date_end = "2019-12-04"
+sub_date_start = "2019-12-01"
+sub_date_end = "2019-12-10"
+dr = Series(pd.date_range(sub_date_start, sub_date_end, freq='D'))
+# existing_dates = ub.check_dates_exists('2019-12-01', '2019-12-05', bq_loc)
+
 
 """
 import sys
