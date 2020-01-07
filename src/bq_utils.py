@@ -8,8 +8,8 @@ from typing import Iterable
 
 import numpy as np
 import pandas as pd
-from google.cloud import bigquery  # noqa
-from google.oauth2 import service_account  # noqa
+from google.cloud import bigquery  # type: ignore
+from google.oauth2 import service_account  # type: ignore
 from pandas import Series
 
 SUB_DATE = "%Y-%m-%d"
@@ -48,7 +48,7 @@ class BqLocation:
 
 def get_creds(creds_loc=None):
     if not creds_loc:
-        creds_loc = os.environ.get("BQCREDS")
+        creds_loc = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
         if not creds_loc:
             raise RuntimeError(
                 "Bigquery credentials not passed, or found in environment."
@@ -69,8 +69,6 @@ def mk_bq_reader(creds_loc=None, cache=False):
     bq_read = partial(
         pd.read_gbq,
         project_id="moz-fx-data-derived-datasets",
-        # TODO: delete following
-        # creds.project_id,
         credentials=creds,
         dialect="standard",
     )

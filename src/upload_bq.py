@@ -1,3 +1,6 @@
+import datetime as dt
+from typing import Union
+
 import bq_utils as bq
 import fire
 import pandas as pd
@@ -50,7 +53,7 @@ def check_dates_exists(
 def main(
     table_name,
     sub_date_start,
-    sub_date_end=None,
+    sub_date_end: Union[str, int],
     dataset="analysis",
     project_id="moz-fx-data-derived-datasets",
     add_schema=False,
@@ -58,8 +61,16 @@ def main(
     cache=True,
     check_dates=True,
 ):
+    """
+    sub_date_start and sub_date_end should be in `%Y-%m-%d` format. If
+    `sub_date_end` is an integer `n`, it pull up until `n` days ago.
+    """
     bq_loc = BqLocation(table_name, dataset, project_id=project_id)
     bq_read = mk_bq_reader(cache=cache)
+    if isinstance(sub_date_end, int):
+        sub_date_end = (
+            dt.date.today() - pd.Timedelta(days=sub_date_end)
+        ).strftime("%Y-%m-%d")
     if check_dates:
         check_dates_exists(sub_date_start, sub_date_end, bq_loc)
 
