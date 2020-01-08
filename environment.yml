@@ -60,9 +60,9 @@ dependencies:
   - toolz
   - ipdb
 
-  # DL
-  # - keras
-  # - chainer
+  # Jupyter stuff
+  - altair_saver
+  - selenium
 
   # HTML
   - requests_cache

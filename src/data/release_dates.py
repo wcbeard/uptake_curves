@@ -102,6 +102,14 @@ def get_min_build_date(days_ago=90):
 ############
 # Combined #
 ############
+def sortable_beta_vers(v):
+    "70.0b7 -> 70.0b07"
+    if "b" not in v:
+        return v
+    maj, min = v.split("b")
+    return f"{maj}b{int(min):02}"
+
+
 def is_rc(v):
     """
     Is pattern like 69.0, rather than 69.0b3
@@ -114,6 +122,7 @@ def get_beta_release_dates(min_build_date="2019", min_pd_date="2019-01-01"):
     Stitch together product details and buildhub
     (for rc builds).
     - read_product_details_all()
+    - this will only pull rc builds from vers=71.0 onward
     """
     bh_beta_rc = (
         pull_bh_data_beta(min_build_date=min_build_date)
@@ -137,7 +146,7 @@ def get_beta_release_dates(min_build_date="2019", min_pd_date="2019-01-01"):
         .reset_index(drop=1)
         # Round down datetimes to nearest date
         .assign(date=lambda x: pd.to_datetime(x.date.dt.date))
-        .astype(str)
+        # .astype(str)
     )
     return beta_release_dates
 

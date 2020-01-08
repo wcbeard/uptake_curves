@@ -16,6 +16,8 @@
 
 # %% [markdown]
 # This notebook ("") tries to download all recent experiments via dbx
+#
+# - [ ] altair: checkbox selection
 
 # %%
 from boot_utes import reload, add_path, path, run_magics
@@ -75,13 +77,6 @@ len(dfcn)
 
 
 # %% [markdown]
-# ## Product details: get current version
-
-# %%
-
-# %%
-
-# %% [markdown]
 # ## Beta release
 
 # %%
@@ -90,8 +85,6 @@ len(dfcn)
 @mem.cache
 def bq_read_cache(*a, **k):
     return bq_read(*a, **k)
-
-
 
 
 # %%
@@ -111,10 +104,9 @@ rv.latest_n_release_beta(beta_release_dates, '2019-12-02', n_releases=3)
 # pd_beta = pull_bh_data_beta()
 
 # %% [markdown]
-# ## Release
+# # Uptake plots
 
 # %% [markdown]
-# # Compare to actual uptake
 # ## Release
 
 # %% [markdown]
@@ -126,6 +118,8 @@ rv.latest_n_release_beta(beta_release_dates, '2019-12-02', n_releases=3)
 # * buildhub: `buildhub_data_rls`
 
 # %%
+import altair.vegalite.v3 as A
+Chart = A.Chart
 import src.uptake_plots as up
 
 # %%
@@ -136,23 +130,82 @@ pd_rls = prod_details.query("date > '2019' & category in ('major', 'stability')"
 # pd_beta = prod_details.query("category == 'dev' & date > '2019'")
 
 # %%
-dfcr = dfcr.copy()
+dfcr = dfc.query("chan == 'release'").copy()
 dfcr = up.combine_uptake_dates_release(dfcr, pd_rls, vers_col="dvers")
-
-# %%
-# dfcr = dfc.query("chan == 'release'")
 w = dfcr.query("os == 'Windows_NT'")
-
-# %%
-w[:3]
-
-# %%
 pdf = up.format_os_df_plot(w, pub_date_col=c.rls_date).query("submission_date > '2019-10-01'")
-
-# %%
-import altair.vegalite.v3 as A
-Chart = A.Chart
 
 # %%
 p_all = up.os_plot_base_release(pdf, color="vers:O", A=A)
 p_all.interactive()
+
+# %% [markdown]
+# ## Beta
+
+# %%
+# dfcb.assign(rls_date=lambda x: x.rls_date.astype(str)).groupby(
+#     ["dvers", "rls_date"]
+# ).n.sum().reset_index(drop=0).query("rls_date == 'nan'")
+
+beta_dates = rv.get_beta_release_dates(min_build_date="2019", min_pd_date="2019-01-01")
+
+# %%
+beta_dates.
+
+# %%
+dfcb = dfc.query("chan == 'beta'").copy()
+dfcb = up.combine_uptake_dates_release(dfcb, beta_dates, vers_col="dvers").drop('vers', axis=1).rename(columns={'dvers': 'vers'})
+
+# %%
+dfcb[:3]
+
+# %%
+dfcb.groupby(['dvers'])
+
+# %%
+w = dfcb.query("os == 'Windows_NT'")
+pdf = up.format_os_df_plot(w, pub_date_col=c.rls_date, channel='beta').query("submission_date > '2019-10-01'")
+
+# min_days_post_sub = pdf.groupby('vers').days_post_pub.transform('min')
+# pdf.loc[min_days_post_sub == -1, 'days_post_pub'] += 1
+
+# %%
+def generate_beta_plot(df, min_date="2019-10-01"):
+    od = OrderedDict()
+    for os, osdf in df.groupby("os"):
+        pdf = up.format_os_df_plot(osdf, pub_date_col=c.rls_date, channel="beta").query(
+            f"submission_date > '{min_date}'"
+        ).assign(os=os).query("nth_recent_release == nth_recent_release")
+        ch = (
+            up.os_plot_base_release(
+                pdf, color="vers:O", separate=False, A=A, channel="beta"
+            )
+            .properties(height=500, width=700, title=f'OS = {os}')
+            .interactive()
+        )
+        od[os] = ch
+    generate_beta_plot.od = od
+    return A.concat(*od.values())
+    
+
+
+chs = generate_beta_plot(dfcb).resolve_scale(
+    color='independent'
+)
+chs
+
+# %%
+from altair_saver import save
+
+# save(chart, "chart.html")
+with A.data_transformers.enable('default'):
+    save(chs, '../reports/figures/oss.html', inline=True)
+
+# %%
+generate_beta_plot.od['Linux'].data
+
+# %%
+pdf[:3]
+
+# %%
+ch.data[:3]

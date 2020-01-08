@@ -1,4 +1,5 @@
 import pandas as pd  # type: ignore
+import src.data.release_dates as rd
 import toolz.curried as z  # type: ignore
 
 
@@ -51,8 +52,24 @@ def get_vers_first_day_above_n_perc_mapping(df, min_pct=0.01):
     )
 
 
-def format_os_df_plot(os_df, pub_date_col="pub_date"):
+def get_release_order(df):
+    df = df[["vers", "vers_min_sday_npct", "bids"]]
+    n_recent_versions = (
+        df.query("vers != 'other'")
+        .pipe(lambda x: x[x.bids.str.len() > 8])
+        .groupby(["vers"])
+        .vers_min_sday_npct.min()
+        .sort_values(ascending=False)
+        .reset_index(drop=0)
+        .assign(nth_recent_release=lambda x: range(1, len(x) + 1))
+    )
+    vers2n = n_recent_versions.set_index("vers").nth_recent_release.to_dict()
+    return df.vers.map(vers2n)
+
+
+def format_os_df_plot(os_df, pub_date_col="pub_date", channel="release"):
     """
+    - needs a version column called `vers`
     - contains data for single os & channel
     - collapse all build_id's into single version
     """
@@ -99,7 +116,6 @@ def format_os_df_plot(os_df, pub_date_col="pub_date"):
         .assign(
             n_pct=lambda x: x.n / x.day_chan_os_sum,
             latest_vers=lambda x: x.vers.eq(latest_version),
-            is_major=lambda x: is_major(x.vers),
         )
         .assign(
             vers_min_sday_npct=lambda x: x.vers.map(
@@ -109,9 +125,23 @@ def format_os_df_plot(os_df, pub_date_col="pub_date"):
         .assign(
             days_post_pub=lambda x: sub_days_null(
                 x.submission_date, x.vers_min_sday_npct
-            )
+            ),
+            nth_recent_release=lambda x: get_release_order(x),
         )
     )
+
+    if channel == "release":
+        pdf = pdf.assign(is_major=lambda x: is_major(x.vers))
+    elif channel == "beta":
+        pdf = pdf.assign(RC=lambda x: x.vers.map(rd.is_rc))
+    else:
+        raise NotImplementedError(f"channel `{channel}` not yet implemented.")
+
+    # Some `days_post_pub` are negative. There are slight off-by-one errors
+    # when there's a tiny rollout on day 1 (like 1%), so the entire series
+    # is offset. This 'un-offsets' it
+    min_days_post_sub = pdf.groupby("vers").days_post_pub.transform("min")
+    pdf.loc[min_days_post_sub == -1, "days_post_pub"] += 1
 
     assert pdf.eval(
         "day_chan_os_sum_min == day_chan_os_sum"
@@ -119,22 +149,40 @@ def format_os_df_plot(os_df, pub_date_col="pub_date"):
     return pdf
 
 
-def os_plot_base_release(df, color="vers:O", separate=False, A=None):
+def os_plot_base_release(
+    df, color="vers:O", separate=False, A=None, channel="release"
+):
     """
     A: altair with working version
     """
     version_opacity = A.Opacity(
         "latest_vers:O", scale=A.Scale(domain=[True, False], range=[1, 0.6])
     )
-    major_shape = A.Shape(
-        "is_major",
-        scale=A.Scale(domain=[True, False], range=["square", "triangle-up"]),
+
+    if channel in ("release", "beta"):
+        shape_field = "is_major" if channel == "release" else "RC"
+        major_shape = A.Shape(
+            shape_field,
+            scale=A.Scale(
+                domain=[True, False], range=["square", "triangle-up"]
+            ),
+        )
+    else:
+        raise NotImplementedError(f"channel `{channel}` not yet implemented.")
+
+    pdf = df.query("days_post_pub <= 14 & days_post_pub > -2").assign(
+        show_n=lambda x: x.nth_recent_release
     )
+    xscale = A.Scale(domain=[-1, pdf.days_post_pub.max() + .5])
     h = (
-        A.Chart(df.query("days_post_pub <= 14 & days_post_pub > -2"))
+        A.Chart(pdf)
         .mark_line(strokeDash=[5, 2])  # , strokeOpacity=.6
         .encode(
-            x=A.X("days_post_pub", axis=A.Axis(title="Days after release")),
+            x=A.X(
+                "days_post_pub",
+                axis=A.Axis(title="Days after release"),
+                scale=xscale,
+            ),
             y=A.Y("n_pct", axis=A.Axis(format="%", title="Percent uptake")),
             strokeOpacity=version_opacity,  # 'latest_vers:O',
             color="vers:O",
@@ -145,12 +193,32 @@ def os_plot_base_release(df, color="vers:O", separate=False, A=None):
                 "submission_date",
                 "vers_min_sday_npct",
                 "bids",
+                "os",
             ],
         )
     )
     if separate:
         return h, h.mark_point()
-    return h + h.mark_point()
+    combined = h + h.mark_point()
+
+    # Add slider
+    os = pdf.os.iloc[0]
+    n_slider = A.binding_range(
+        min=pdf.show_n.min(),
+        max=pdf.show_n.max(),
+        step=1,
+    )
+    slider_selection = A.selection_single(
+        bind=n_slider,
+        fields=["show_n"],
+        name=f"Num_versions_{os}",
+        init={"show_n": 10},
+    )
+    combined = combined.add_selection(slider_selection).transform_filter(
+        A.datum.show_n <= slider_selection.show_n
+    )
+
+    return combined
 
 
 # For plotting a single version updake
