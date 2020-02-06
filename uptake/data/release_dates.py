@@ -3,7 +3,7 @@ import re
 
 import pandas as pd  # type: ignore
 # import buildhub_utils as bh
-import src.data.buildhub_utils as bh  # type: ignore
+import uptake.data.buildhub_utils as bh  # type: ignore
 from requests import get
 
 

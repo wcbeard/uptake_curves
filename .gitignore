@@ -74,3 +74,5 @@ data/*.json
 notebooks/data/*.json
 *.svg
 */cache/joblib/
+*.json
+*.html

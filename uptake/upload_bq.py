@@ -1,14 +1,13 @@
 import datetime as dt
-from typing import Union
+from typing import Optional, Union
 
 import bq_utils as bq
-import fire
-import pandas as pd
+import fire  # type: ignore
+import pandas as pd  # type: ignore
+
 # from queries import pull_min as pull_min
 import queries
 from bq_utils import BqLocation, drop_table, mk_bq_reader, upload
-from google.cloud import bigquery  # noqa
-from google.oauth2 import service_account  # noqa
 
 
 def download_version_counts(bq_read, sub_date_start, sub_date_end=None):
@@ -50,10 +49,22 @@ def check_dates_exists(
     return duplicate_dates
 
 
+def get_latest_missing_date(bq_loc: bq.BqLocation, creds_loc=None):
+    q = f"""
+    select max(submission_date) as date
+    from {bq_loc.sql}
+    """
+    bq_read = bq.mk_bq_reader(creds_loc=creds_loc, cache=False)
+    max_dates = bq_read(q)
+    [max_date] = max_dates.date
+    max_missing_date = max_date + pd.Timedelta(days=1)
+    return max_missing_date.strftime(bq.SUB_DATE)
+
+
 def main(
     table_name,
-    sub_date_start,
-    sub_date_end: Union[str, int],
+    sub_date_start: Optional[str] = None,
+    sub_date_end: Union[str, int] = 1,
     dataset="analysis",
     project_id="moz-fx-data-derived-datasets",
     add_schema=False,
@@ -64,9 +75,15 @@ def main(
     """
     sub_date_start and sub_date_end should be in `%Y-%m-%d` format. If
     `sub_date_end` is an integer `n`, it pull up until `n` days ago.
+    if `sub_date_start` is None, look up the most recently missing date
+    that has already been uploaded.
     """
     bq_loc = BqLocation(table_name, dataset, project_id=project_id)
     bq_read = mk_bq_reader(cache=cache)
+    if sub_date_start is None:
+        sub_date_start = get_latest_missing_date(bq_loc)
+        print(f"No start date passed. Using {sub_date_start}")
+
     if isinstance(sub_date_end, int):
         sub_date_end = (
             dt.date.today() - pd.Timedelta(days=sub_date_end)

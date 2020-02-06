@@ -1,5 +1,5 @@
 import pandas as pd
-import src.bq_utils as bq
+import uptake.bq_utils as bq
 from pytest import raises
 
 
