@@ -187,15 +187,260 @@ def look_at_special_mostly_null_fields():
 #     - my new fun has much smaller date range than original
 
 # %%
-df_plottable = plu.main()
+del df_plottable
 
 # %%
-dfpr = df_plottable.query("channel == 'release'")
-dfpr = dfpr.drop(['nth_recent_release'], axis=1)
+df_plottable_yest = plu.main(sub_date='2020-02-05')
+df_plottable_yest.submission_date.max()
+
+# %%
+df_plottable_tod = plu.main(sub_date='2020-02-09')
+df_plottable_tod.submission_date.max()
+
+# %%
+df_plottable_to_upl = plu.main(sub_date='2020-02-09')
+
+# %%
+df_plottable_to_upl.submission_date.value_counts(normalize=0)
+
+# %%
+df_plottable_tod.submission_date.drop_duplicates()
+
+# %%
+print(q)
+
+# %%
+q = f"select distinct submission_date as date from analysis.wbeard_uptake_plot_test where submission_date > '{plu.to_sql_date(df_plottable_tod.submission_date.min())}'"
+distinct_existing_dates = bq_read(q).date.dt.tz_localize(None)
+
+# %%
+missing = df_plottable_tod.pipe(lambda x: x[~x.submission_date.isin(distinct_existing_dates)])
+
+# %%
+df_plottable_to_upl = plu.main(sub_date='2020-02-09')
+
+# %%
+len(df_plottable_to_upl)
+
+# %%
+df_plottable_to_upl
+
+# %%
+import uptake.plot.plot_upload as plu
+import uptake.plot.uptake_plots as up
+
+# dfpr = df_plottable.query("channel == 'release'")
+# dfpr = dfpr.rename(columns={'nth_recent_release': 'nrro'}).reset_index(drop=1)
+# .drop(['nth_recent_release'], axis=1)
+
+# %%
+df_plottable_yest[:3]
+
+# %%
+creds = bq.get_creds()
+
+# %%
+df_plottable.submission_date.max()
+
+# %%
+df_plottable_yest.to_gbq('analysis.wbeard_uptake_plot_test', project_id='moz-fx-data-derived-datasets', credentials=creds, if_exists='replace')
+
+# %%
+
+# %%
+max_date
+
+# %%
+
+# %%
+d1 = df_plottable_tod[['vers', 'submission_date', 'os', 'channel', 'n']]
+d2 = df_plottable_yest[['vers', 'submission_date', 'os', 'channel', 'n']].rename(columns={'n': 'n2'})
+
+mgd = d1.merge(d2, on=['vers', 'submission_date', 'os', 'channel'], how='left').assign(new=lambda x: x.n2.isnull())
+mgd[:3]
+
+# %%
+df_pl
+
+# %%
+mgd.query("new")
+# .query("n2 == n2")
+
+# %%
+d1.submission_date.max()
+
+# %%
+d2.submission_date.max()
+
+# %%
+len(df_plottable_yest)
+
+# %%
+df_plottable_tod
+
+# %%
+sql_rank = '''with base as (
+select *
+from `analysis.wbeard_uptake_plot_test` u
+)
+
+, unq_vers as (
+select
+  os
+  , vers
+  , channel 
+  , rank() over (partition by os, channel order by min(b.build_ids) desc) as rank
+from base b
+where not b.old_build
+group by 1, 2, 3
+)
+
+, builds as (
+select
+  b.*
+  , rank
+from base b
+left join unq_vers using (os, vers, channel)
+)
+
+
+select *
+from builds
+--where rank is not null
+order by os, channel, rank
+'''
+
+df_pl_dl_ = bq_read(sql_rank)
+
+# %%
+df_pl_dl = df_pl_dl_.assign(
+    submission_date=lambda x: x.submission_date.dt.tz_localize(None),
+    vers_min_date_above_npct=lambda x: x.vers_min_date_above_npct.dt.tz_localize(None),
+).drop(["nth_recent_release", 'latest_vers'], axis=1).rename(columns={'rank': 'nth_recent_release'})
+
+
+# %%
+df_pl_dl[:3]
+
+# %%
+up.generate_channel_plot(
+    df_pl_dl.query("channel == 'release'"), A, min_date="2019-10-01", channel="release", separate=False
+)
+
+# %%
+df_pl_dl[:3]
+
+# %%
+df_pl_dl.query("latest_vers")
+
+# %%
+dfo = df_plottable.sort_values(
+    ["os", "channel", "vers", "submission_date"], ascending=True
+).reset_index(drop=1)
+df2 = (
+    df_pl_dl.sort_values(["os", "channel", "vers", "submission_date"], ascending=True)
+    .drop(["rank"], axis=1)
+    .assign(
+        is_major=lambda x: x.is_major.fillna(float('nan'))
+    )
+    .reset_index(drop=1)
+)
+
+# %%
+dfo.query("RC != RC").channel.value_counts(normalize=0)
+
+
+# %% {"jupyter": {"outputs_hidden": true}}
+def compare_dtypes(d1, d2):
+    dtps = (
+        DataFrame({"d1": d1.dtypes, "d2": d2.dtypes})
+        .reset_index(drop=0)
+        .rename(columns={"index": "colname"})
+        .assign(same=lambda x: x.d1 == x.d2,)
+    )
+    return dtps
+
+def compare_srs(s1, s2):
+    dd = DataFrame({'s1': s1, 's2': s2})
+    dd.query("s1 != s2")
+#     .query("o == o").applymap(type)
+    return dd
+
+
+# compare_dtypes(dfo, df2)
+compare_srs(dfo.is_major, df2.is_major)
+
+# %%
+assert_frame_equal(dfo, df2)
+
+# %%
+gb = (
+    df_pl_dl.query("nth_recent_release == nth_recent_release")[
+        ["nth_recent_release", "rank", "n"]
+    ]
+    .assign(eq=lambda x: x.nth_recent_release == x["rank"])
+    .groupby(["eq", "nth_recent_release", "rank"])
+    .n.sum()
+    .reset_index(drop=0)
+)
+
+
+# %%
+gb.groupby(['eq']).n.sum().pipe(lambda x: x.div(x.sum()))
+
+# %%
+df_plottable[:3]
+
+# %%
+df_pl_dl.submission_date.dt.tz_localize(None)
+
+# %%
+dfpr[:3]
 
 # %%
 # dfpr.query("nth_recent_release == nth_recent_release")[:3]
 dfpr[:3]
+
+# %%
+dfpr.query("os == 'Darwin' & vers == '71.0'").drop_duplicates([c.build_ids, c.min_build_id])
+
+# %%
+dfpr2 = merge_channel_ordered_versions(dfpr)
+
+# %%
+len(recent_version_order)
+
+# %%
+dfpr2[:3]
+
+# %%
+verss = dfpr2.dropna(axis=0, subset=['nrro']).query("~old_build")[['nrro', c.recent_version_order]]
+
+# %%
+diffs = verss.pipe(lambda x: x[x.nrro != x.recent_version_order])
+diffs[:3]
+
+# %%
+pd.to_datetime('2019-11-01') + pd.Timedelta(days=28)
+
+# %%
+lin = dfpr2.query("os == 'Linux'")
+
+# %%
+add_ones = lambda df: df.reset_index(drop=0).reset_index(drop=0).assign(index=lambda x: x['index'] + 1)
+lin.groupby(['nrro', 'vers']).size().pipe(add_ones)
+
+# %%
+lin.groupby(['recent_version_order', 'vers']).size().pipe(add_ones)
+
+# %%
+dfpr.query("os == 'Linux'").query("nrro in (16, 17, 18)").drop_duplicates('vers')
+
+# %%
+dfpr2.query("os == 'Linux'").query("nrro in (16, 17, 18, 19, 20)").drop_duplicates('vers').sort_values(["nrro"], ascending=True)
+
+# %%
+dfpr2.loc[diffs.index].query("recent_version_order == 18.0")
 
 # %%
 dfpr.groupby(['vers', 'os'])[c.vers_min_date_above_npct].min().unstack().fillna(0)

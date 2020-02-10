@@ -1,6 +1,7 @@
 from collections import OrderedDict
 
 import pandas as pd  # type: ignore
+from pandas.testing import assert_frame_equal  # type: ignore
 import uptake.data.release_dates as rd  # type: ignore
 import uptake.utils.uptake_utes as ut
 
@@ -73,6 +74,9 @@ def get_release_order(df):
     return df.vers.map(vers2n)
 
 
+#############################
+# Plot formatting functions #
+#############################
 def format_os_df_plot(os_df, pub_date_col="pub_date", channel="release"):
     """
     - needs a version column called `vers`
@@ -128,6 +132,7 @@ def format_os_df_plot(os_df, pub_date_col="pub_date", channel="release"):
         .assign(
             n_pct=lambda x: x.n / x.day_chan_os_sum,
             latest_vers=lambda x: x.vers.eq(latest_version),
+            old_build=lambda x: x.build_ids.map(len) <= 8,
         )
         .assign(
             vers_min_date_above_npct=lambda x: x.vers.map(
@@ -176,6 +181,55 @@ def map_nightly_vers2dvers(vers_df):
     return vers2dvers
 
 
+key = ["os", "build_ids", "vers"]
+
+
+def get_channel_ordered_versions(df):
+    """
+    For each os, order all the `n` versions from 1 to n+1,
+    where 1 is the most recent.
+    Transform this rank-ordering into tidy-format.
+    This functionality should be replicated on the SQL side.
+    """
+    unique_ordered_os_vers = (
+        df.query("~old_build")
+        .groupby(["os", "vers"])
+        .build_ids.min()
+        .reset_index(drop=0)
+        .sort_values(["os", "build_ids"], ascending=[True, False])[key]
+    )
+    unique_ordered_os_vers[
+        "recent_version_order"
+    ] = unique_ordered_os_vers.groupby("os").vers.transform(
+        lambda s: range(1, len(s) + 1)
+    )
+    return unique_ordered_os_vers
+
+
+def merge_channel_ordered_versions(df):
+    unique_ordered_os_vers = get_channel_ordered_versions(df)
+    df2 = (
+        df
+        # .reset_index(drop=1)
+        .reset_index(drop=0)
+        .merge(
+            unique_ordered_os_vers[["os", "vers", "recent_version_order"]],
+            on=["os", "vers"],
+            how="left",
+        )
+        .set_index("index")
+        .sort_index()
+    )
+    assert_frame_equal(
+        df.reset_index(drop=1),
+        df2.drop(["recent_version_order"], axis=1).reset_index(drop=1),
+    )
+    return df2
+
+
+######################
+# Plotting functions #
+######################
 def os_plot_base_release(
     df,
     color="vers:O",

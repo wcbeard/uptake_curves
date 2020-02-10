@@ -91,6 +91,7 @@ def main(
     if check_dates:
         check_dates_exists(sub_date_start, sub_date_end, bq_loc)
 
+    print(f"Pulling dates from {sub_date_start} - {sub_date_end}")
     df = download_version_counts(
         bq_read, sub_date_start, sub_date_end=sub_date_end
     )
