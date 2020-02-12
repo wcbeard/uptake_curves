@@ -17,6 +17,7 @@ from pandas import Series
 query_func = bq.mk_query_func()
 bq_loc = bq.BqLocation("wbeard_uptake_vers")
 pd.options.display.min_rows = 30
+pd.options.display.max_columns = 30
 
 # df = pd.read_csv("data/samp/samp.csv")
 

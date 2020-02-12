@@ -115,8 +115,8 @@ print(len(dfc))
 # %%
 import altair.vegalite.v3 as A
 Chart = A.Chart
-import uptake.uptake_plots as up
-import uptake.plot_upload as plu
+from uptake.plot import uptake_plots as up
+from uptake.plot import plot_upload as plu
 
 # %%
 prod_details = rv.read_product_details_all()
@@ -242,15 +242,13 @@ creds = bq.get_creds()
 # %%
 df_plottable.submission_date.max()
 
+# %% [markdown]
+# ## Render from BQ
+
+# %%
+
 # %%
 df_plottable_yest.to_gbq('analysis.wbeard_uptake_plot_test', project_id='moz-fx-data-derived-datasets', credentials=creds, if_exists='replace')
-
-# %%
-
-# %%
-max_date
-
-# %%
 
 # %%
 d1 = df_plottable_tod[['vers', 'submission_date', 'os', 'channel', 'n']]
@@ -262,7 +260,7 @@ mgd[:3]
 # %%
 df_pl
 
-# %%
+# %% {"jupyter": {"outputs_hidden": true}}
 mgd.query("new")
 # .query("n2 == n2")
 
@@ -276,7 +274,60 @@ d2.submission_date.max()
 len(df_plottable_yest)
 
 # %%
-df_plottable_tod
+
+# %%
+from uptake.plot import embed_html as eht
+
+# %%
+# import uptake.plot.embed_html
+
+
+bq_read_cache = bq.mk_bq_reader(cache=True)
+dl_pl_rls = eht.download_channel_plot('release', dt.date.today(), bq_read=bq_read_cache)
+od2 = up.generate_channel_plot(dl_pl_rls, A, min_date="2019-06-01", channel='release', separate=True)
+eht.render_channel(win=od['Windows_NT'], mac=od['Darwin'], linux=od['Linux'], channel=channel)
+
+# %%
+# eht.main??
+
+# %%
+eht.main(sub_date='2020-02-10')
+
+# %%
+dl_pl_rls[:3]
+
+# %%
+
+# %%
+# import uptake.plot.embed_html as emb
+
+od = up.generate_channel_plot(dfpr, A, min_date="2019-06-01", channel='release', separate=True)
+emb.render_channel(win=od['Windows_NT'], mac=od['Darwin'], linux=od['Linux'], channel=channel)
+
+# %%
+dfpr[:3]
+
+# %%
+dl_pl_rls[:3]
+
+# %%
+len(dl_pl_rls)
+
+# %%
+# from uptake.plot.plot_download import templ_sql_rank
+
+dest_table="analysis.wbeard_uptake_plot_test"
+sub_date = dt.date.today()
+min_sub_date = sub_date - pd.Timedelta(days=30*5)
+
+
+sql_rank = templ_sql_rank.format(
+    channel='release',
+min_sub_date=plu.to_sql_date(min_sub_date),
+max_sub_date=plu.to_sql_date(sub_date),
+)
+
+print(sql_rank)
 
 # %%
 sql_rank = '''with base as (
@@ -318,6 +369,17 @@ df_pl_dl = df_pl_dl_.assign(
     vers_min_date_above_npct=lambda x: x.vers_min_date_above_npct.dt.tz_localize(None),
 ).drop(["nth_recent_release", 'latest_vers'], axis=1).rename(columns={'rank': 'nth_recent_release'})
 
+
+# %%
+len(df_pl_dl.query("~old_build"))
+
+# %%
+df_pl_dl.groupby(c.submission_date).size()
+
+# %%
+df_pl_dl[:3]
+
+# %%
 
 # %%
 df_pl_dl[:3]
@@ -445,16 +507,12 @@ dfpr2.loc[diffs.index].query("recent_version_order == 18.0")
 # %%
 dfpr.groupby(['vers', 'os'])[c.vers_min_date_above_npct].min().unstack().fillna(0)
 
+
 # %%
 # chs_rls = up.generate_channel_plot(dfcr, A, min_date="2019-06-01", channel='release')
 # od = up.generate_channel_plot_full(dfcr, A, min_date="2019-06-01", channel='release', separate=True)
 
 # %%
-import uptake.plot.embed_html as emb
-
-od = up.generate_channel_plot(dfpr, A, min_date="2019-06-01", channel='release', separate=True)
-emb.render_channel(win=od['Windows_NT'], mac=od['Darwin'], linux=od['Linux'], channel=channel)
-
 
 # %%
 def f(od, channel = 'release'):

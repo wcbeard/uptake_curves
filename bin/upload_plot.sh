@@ -22,3 +22,8 @@ python uptake/plot/plot_upload.py \
     --cache=False \
     --creds_loc=None \
     --ret_df=None
+
+python uptake/plot/embed_html.py \
+    --sub_date=None \
+    --plot_table="analysis.wbeard_uptake_plot_test" \
+    --cache=True
