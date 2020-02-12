@@ -76,3 +76,4 @@ notebooks/data/*.json
 */cache/joblib/
 *.json
 *.html
+cache/

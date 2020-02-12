@@ -1,10 +1,12 @@
 import datetime as dt
 
+import fire  # type: ignore
 import pandas as pd  # type: ignore
 
 import uptake.bq_utils as bq
 import uptake.data.release_dates as rd
 import uptake.plot.uptake_plots as up
+
 
 """
 Module to format raw data counts uploaded to BQ via `upload_bq.py`,
@@ -127,15 +129,21 @@ def to_sql_date(d):
 
 
 def main(
-    dest_table="analysis.wbeard_uptake_plot_test",
     sub_date=None,
-    cache=False,
+    dest_table="analysis.wbeard_uptake_plot_test",
     src_table="analysis.wbeard_uptake_vers",
     project_id="moz-fx-data-derived-datasets",
+    cache=False,
     creds_loc=None,
+    ret_df="all",
 ):
     """
     sub_date: 'YYYY-mm-dd' or None. If None, then use today.
+    Pull 11 months' worth of data from the uptake summaries
+    table.
+    ret_df: 'all' to return all rows (including rows already)
+        uploaded, 'upload' for those about to be uploaded, None
+        to return nothing.
     """
     date = pd.to_datetime(sub_date) if sub_date else dt.datetime.today()
     months_ago11 = to_sql_date(
@@ -157,6 +165,11 @@ def main(
     df_plottable = format_all_channels_data(
         dfr, dfb, dfn, channels_months_ago=(7, 3, 3), sub_date=date
     )
+    show_dates = df_plottable.submission_date.map(to_sql_date)
+    print(
+        f"""Data formatted for dates '{show_dates.min()}' - '{(
+            show_dates.max())}' (before filtering)"""
+    )
 
     # Find dates that have already been uploaded. Filter out rows in
     # df_plottable with these dates.
@@ -164,7 +177,7 @@ def main(
         f"""
         select distinct submission_date as date
         from {dest_table}
-        where submission_date > '{to_sql_date(
+        where submission_date >= '{to_sql_date(
             df_plottable.submission_date.min()
         )}'
         """
@@ -174,7 +187,28 @@ def main(
         lambda x: x[~x.submission_date.isin(distinct_existing_dates)]
     )
 
+    print(
+        f"""Uploading data for dates:\n{(
+            df_plottable_to_upload.submission_date
+            .drop_duplicates()
+            .sort_values()
+            .map(to_sql_date)
+            .tolist()
+        )}"""
+    )
+
     df_plottable_to_upload.to_gbq(
         dest_table, project_id=project_id, credentials=creds, if_exists="append"
     )
-    return df_plottable_to_upload
+    if ret_df is None:
+        return
+    elif ret_df == "all":
+        return df_plottable_to_upload
+    elif ret_df == "upload":
+        return df_plottable_to_upload
+    else:
+        raise ValueError(f"{ret_df} not one of {{None, 'all', 'upload'}}")
+
+
+if __name__ == "__main__":
+    fire.Fire(main)
