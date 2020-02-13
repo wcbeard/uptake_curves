@@ -266,7 +266,7 @@ def os_plot_base_release(
     ).assign(
         show_n=lambda x: x.nth_recent_release,
         version=lambda x: x.vers,
-        week_day=lambda x: x.submission_date.dt.weekday_name.str[:3],
+        week_day=lambda x: x.submission_date.dt.day_name().str[:3],
         days_after_release=lambda x: x.days_post_pub,
         release_day=lambda x: x.vers_min_date_above_npct,
     )
