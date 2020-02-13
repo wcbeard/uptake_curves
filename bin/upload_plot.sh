@@ -26,4 +26,5 @@ python uptake/plot/plot_upload.py \
 python uptake/plot/embed_html.py \
     --sub_date=None \
     --plot_table="analysis.wbeard_uptake_plot_test" \
+    --release_beta_nightly_n_versions="12,18,30" \
     --cache=True
