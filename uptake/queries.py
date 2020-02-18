@@ -3,7 +3,7 @@ SELECT
   c.submission_date
   , c.app_version
   , count(*) as n
-from `telemetry.clients_daily` c
+from `moz-fx-data-derived-datasets.telemetry.clients_daily` c
 where (
        (submission_date between '2019-07-09' and '2019-07-20') OR
        (submission_date between '2019-09-01' and '2019-09-14') OR
@@ -30,7 +30,7 @@ SELECT
       else app_build_id end as bid
   , c.app_display_version as dvers
   , count(*) as n
-from `telemetry.clients_daily` c
+from `moz-fx-data-derived-datasets.telemetry.clients_daily` c
 where (
 --        (submission_date between '2019-07-09' and '2019-07-20') OR
 --        (submission_date between '2019-09-01' and '2019-09-14') OR
@@ -83,7 +83,7 @@ def pull_min(day1, day_end=None):
            app_build_id) as bid
       , c.app_display_version as dvers
       , count(*) as n
-    from `telemetry.clients_daily` c
+    from `moz-fx-data-derived-datasets.telemetry.clients_daily` c
     where (
            (submission_date between '{day1}' and '{day_end}')
           )
