@@ -22,6 +22,8 @@ def default_proj(proj):
     if env_proj:
         print(f"Using project {env_proj}")
         return env_proj
+    else:
+        print(f"BQ_PROJ env variable not found. Using {proj}")
     return proj
 
 
