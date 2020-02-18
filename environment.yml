@@ -91,6 +91,7 @@ dependencies:
   # Data
   - google-cloud-bigquery
   - pandas-gbq
+  - tqdm
 
 # jupyter contrib nbextension install --user --skip-running-check
 # jt -t grade3 -cellw '100%'

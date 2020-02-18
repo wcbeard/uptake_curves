@@ -15,12 +15,20 @@ from pandas import Series
 SUB_DATE = "%Y-%m-%d"
 
 
+def default_proj(proj):
+    env_proj = os.environ.get('BQ_PROJ')
+    if env_proj:
+        print(f"Using project {env_proj}")
+        return env_proj
+    return proj
+
+
 class BqLocation:
     def __init__(
         self,
         table,
-        dataset="analysis",
-        project_id="moz-fx-data-derived-datasets",
+        dataset="wbeard",
+        project_id=default_proj("moz-fx-data-derived-datasets"),
     ):
         self.table = table
         self.dataset = dataset
@@ -68,7 +76,7 @@ def mk_bq_reader(creds_loc=None, cache=False):
 
     bq_read = partial(
         pd.read_gbq,
-        project_id="moz-fx-data-derived-datasets",
+        project_id=default_proj("moz-fx-data-derived-datasets"),
         credentials=creds,
         dialect="standard",
     )
@@ -100,7 +108,8 @@ def mk_query_func(creds_loc=None):
     take a while if a lot of queries are repeatedly made.
     """
     creds = get_creds(creds_loc=creds_loc)
-    client = bigquery.Client(project=creds.project_id, credentials=creds)
+
+    client = bigquery.Client(project=default_proj(creds.project_id), credentials=creds)
 
     def blocking_query(*a, **k):
         job = client.query(*a, **k)
@@ -114,7 +123,7 @@ def mk_query_func(creds_loc=None):
 
 def mk_query_func_async(creds_loc=None):
     creds = get_creds(creds_loc=creds_loc)
-    client = bigquery.Client(project=creds.project_id, credentials=creds)
+    client = bigquery.Client(project=default_proj(creds.project_id), credentials=creds)
     return client.query
 
 
@@ -155,7 +164,8 @@ def upload(df, loc: BqLocation, add_schema=False):
         "load",
         "--noreplace",
         "--project_id",
-        "moz-fx-data-derived-datasets",
+        "moz-fx-data-bq-data-science",
+        #"moz-fx-data-derived-datasets",
         "--source_format",
         "CSV",
         "--skip_leading_rows",
