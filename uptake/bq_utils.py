@@ -6,17 +6,19 @@ from functools import partial
 from os.path import abspath, exists, expanduser
 from typing import Iterable
 
-import numpy as np
-import pandas as pd
 from google.cloud import bigquery  # type: ignore
 from google.oauth2 import service_account  # type: ignore
+from google import auth  # type: ignore
+
+import numpy as np  # type: ignore
+import pandas as pd  # type: ignore
 from pandas import Series
 
 SUB_DATE = "%Y-%m-%d"
 
 
 def default_proj(proj):
-    env_proj = os.environ.get('BQ_PROJ')
+    env_proj = os.environ.get("BQ_PROJ")
     if env_proj:
         print(f"Using project {env_proj}")
         return env_proj
@@ -55,15 +57,11 @@ class BqLocation:
 
 
 def get_creds(creds_loc=None):
-    if not creds_loc:
-        creds_loc = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
-        if not creds_loc:
-            raise RuntimeError(
-                "Bigquery credentials not passed, or found in environment."
-            )
-
-    creds_loc = abspath(expanduser(creds_loc))
-    creds = service_account.Credentials.from_service_account_file(creds_loc)
+    if creds_loc:
+        creds_loc = abspath(expanduser(creds_loc))
+        creds = service_account.Credentials.from_service_account_file(creds_loc)
+    else:
+        creds, _proj_id = auth.default()
     return creds
 
 
@@ -109,7 +107,9 @@ def mk_query_func(creds_loc=None):
     """
     creds = get_creds(creds_loc=creds_loc)
 
-    client = bigquery.Client(project=default_proj(creds.project_id), credentials=creds)
+    client = bigquery.Client(
+        project=default_proj(creds.project_id), credentials=creds
+    )
 
     def blocking_query(*a, **k):
         job = client.query(*a, **k)
@@ -123,7 +123,9 @@ def mk_query_func(creds_loc=None):
 
 def mk_query_func_async(creds_loc=None):
     creds = get_creds(creds_loc=creds_loc)
-    client = bigquery.Client(project=default_proj(creds.project_id), credentials=creds)
+    client = bigquery.Client(
+        project=default_proj(creds.project_id), credentials=creds
+    )
     return client.query
 
 
@@ -165,7 +167,6 @@ def upload(df, loc: BqLocation, add_schema=False):
         "--noreplace",
         "--project_id",
         "moz-fx-data-bq-data-science",
-        #"moz-fx-data-derived-datasets",
         "--source_format",
         "CSV",
         "--skip_leading_rows",
