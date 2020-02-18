@@ -271,7 +271,7 @@ def os_plot_base_release(
         release_day=lambda x: x.vers_min_date_above_npct,
     )
 
-    xscale = A.Scale(domain=[-1, pdf.days_post_pub.max() + .5])
+    xscale = A.Scale(domain=[-1, float(pdf.days_post_pub.max()) + .5])
     h = (
         A.Chart(pdf)
         .mark_line(strokeDash=[5, 2])
@@ -308,8 +308,11 @@ def os_plot_base_release(
 
     # Add slider
     os = pdf.os.iloc[0]
+
+    # Altair/json chokes on np.int64
+    show_n_versions = [float(n) for n in pdf.show_n]
     n_slider = A.binding_range(
-        min=pdf.show_n.min(), max=pdf.show_n.max(), step=1
+        min=min(show_n_versions), max=max(show_n_versions), step=1
     )
     slider_selection = A.selection_single(
         bind=n_slider,

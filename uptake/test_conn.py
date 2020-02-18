@@ -4,6 +4,8 @@ import pandas as pd  # type: ignore
 from google.oauth2 import service_account  # type: ignore
 from fire import Fire  # type: ignore
 
+# creds, default_project_id = auth.default()
+
 
 def mk_bq_reader(creds_loc):
     """
@@ -27,6 +29,7 @@ def main(creds_loc):
         """
         select max(submission_date) as date
         from `moz-fx-data-bq-data-science`.wbeard.uptake_version_counts
+        --from `moz-fx-data-derived-datasets`.analysis.wbeard_uptake_vers
     """
     )
     print(res)

@@ -7,7 +7,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.3.0
+#       jupytext_version: 1.3.4
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -57,6 +57,7 @@ import wbeard.buildhub_utils as dbh
 
 # %%
 import uptake.data.buildhub_utils as bh
+import bq_utils as bq
 import uptake.utils.uptake_utes as uu
 import uptake.data.release_dates as rv
 import altair.vegalite.v3 as a3
@@ -124,12 +125,16 @@ dfc = bq_read("select * from analysis.wbeard_uptake_vers")
 
 # %%
 # dfcr, dfcb, dfcn = process_raw_channel_counts(dfc, prod_details)
-dfcr, dfcb, dfcn = plu.main()
+# dfcr, dfcb, dfcn = plu.main()
+mres = plu.main(ret_df="all", cache=True)
 
 # %%
+dfcr = mres.query("channel == 'release'")
 
 # %%
 dfcr[:3]
+
+# %%
 
 # %%
 pd.options.display.width = 220
@@ -143,7 +148,7 @@ res = format_channel_data(dfcr, channel="release")
 len(res)
 
 # %%
-import bq_utils as bq
+
 
 def format_all_channels_data(dfr, dfb, dfn, channels_months_ago=(7, 3, 3), sub_date: str = None):
     def get_min_date(months_ago):
@@ -204,26 +209,8 @@ df_plottable_to_upl = plu.main(sub_date='2020-02-09')
 df_plottable_to_upl.submission_date.value_counts(normalize=0)
 
 # %%
-df_plottable_tod.submission_date.drop_duplicates()
-
-# %%
-print(q)
-
-# %%
 q = f"select distinct submission_date as date from analysis.wbeard_uptake_plot_test where submission_date > '{plu.to_sql_date(df_plottable_tod.submission_date.min())}'"
 distinct_existing_dates = bq_read(q).date.dt.tz_localize(None)
-
-# %%
-missing = df_plottable_tod.pipe(lambda x: x[~x.submission_date.isin(distinct_existing_dates)])
-
-# %%
-df_plottable_to_upl = plu.main(sub_date='2020-02-09')
-
-# %%
-len(df_plottable_to_upl)
-
-# %%
-df_plottable_to_upl
 
 # %%
 import uptake.plot.plot_upload as plu
@@ -234,9 +221,6 @@ import uptake.plot.uptake_plots as up
 # .drop(['nth_recent_release'], axis=1)
 
 # %%
-df_plottable_yest[:3]
-
-# %%
 creds = bq.get_creds()
 
 # %%
@@ -244,8 +228,6 @@ df_plottable.submission_date.max()
 
 # %% [markdown]
 # ## Render from BQ
-
-# %%
 
 # %%
 df_plottable_yest.to_gbq('analysis.wbeard_uptake_plot_test', project_id='moz-fx-data-derived-datasets', credentials=creds, if_exists='replace')
@@ -274,18 +256,72 @@ d2.submission_date.max()
 len(df_plottable_yest)
 
 # %%
-
-# %%
 from uptake.plot import embed_html as eht
+import altair as A4
+
+_chan = 'release'
+
+# bq_read_cache = bq.mk_bq_reader(cache=True)
+# dl_pl_rls = eht.download_channel_plot(_chan, dt.date.today(), bq_read=bq_read_cache, n_versions=20)
+od = up.generate_channel_plot(dl_pl_rls, A4, min_date="2019-06-01", channel=_chan, separate=True)
 
 # %%
-# import uptake.plot.embed_html
+base2 = Path('../reports/test2')
+
+with A4.data_transformers.enable('default'):
+    eht.render_channel(win=od['Windows_NT'], mac=od['Darwin'], linux=od['Linux'], channel=_chan, base_dir=base2)
+
+# %%
+d = od['Windows_NT'].to_dict()
+
+# %%
+base2.mkdir()
+
+# %%
+A4.__version__
+
+# %%
+od['Windows_NT']
 
 
-bq_read_cache = bq.mk_bq_reader(cache=True)
-dl_pl_rls = eht.download_channel_plot('release', dt.date.today(), bq_read=bq_read_cache)
-od2 = up.generate_channel_plot(dl_pl_rls, A, min_date="2019-06-01", channel='release', separate=True)
-eht.render_channel(win=od['Windows_NT'], mac=od['Darwin'], linux=od['Linux'], channel=channel)
+# %%
+def leaf_types(d):
+    dct = {}
+    for k, v in d.items():
+        if isinstance(v, list):
+            xs = v
+            all_types = [list_elem_type(x) for x in xs]
+            dct[k] = all_types
+#             [t for t in set(all_types)]
+        elif isinstance(v, dict):
+            dct[k] = leaf_types(v)
+        else:
+            dct[k] = type(v)
+    return dct
+
+def list_elem_type(x):
+    if isinstance(x, list):
+#         return 'list'
+        return [list_elem_type(e) for e in x]
+    elif isinstance(x, dict):
+#         return 'dict'
+        return leaf_types(x)
+    else:
+#         return 'xxx'
+        return type(x)
+
+leaf_types(d)
+
+# %%
+leaf_types(de)
+
+# %%
+de = d['layer'][0]
+de
+
+# %%
+
+# %%
 
 # %%
 # eht.main??
