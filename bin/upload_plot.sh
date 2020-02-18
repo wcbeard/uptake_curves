@@ -11,6 +11,7 @@ cd $project_dir
 
 source ~/miniconda3/etc/profile.d/conda.sh
 conda activate uptake_curves
+export BQ_PROJ="moz-fx-data-bq-data-science"
 
 echo "=> Updating summary table"
 python uptake/upload_bq.py \
