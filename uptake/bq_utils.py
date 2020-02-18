@@ -61,7 +61,8 @@ def get_creds(creds_loc=None):
         creds_loc = abspath(expanduser(creds_loc))
         creds = service_account.Credentials.from_service_account_file(creds_loc)
     else:
-        creds, _proj_id = auth.default()
+        creds, project_id = auth.default()
+        print(f"Pulling default credentials, with project_id={project_id}")
     return creds
 
 
