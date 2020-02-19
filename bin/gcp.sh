@@ -38,7 +38,9 @@ function gcscp {
 function gcstop {
     gcloud beta compute instances \
         stop "$INSTANCE" \
-        --project=$PROJECT
+        --project=$PROJECT \
+        --zone $ZONE
+
 }
 
 
@@ -48,6 +50,7 @@ gcstart
 sleep 10
 gcssh
 gcscp
+gcstop
 
 # sleep 10
 # gcloud beta compute --project "moz-fx-dev-sguha-rwasm" ssh "instance-1"  --command " cd /home/sguha/missioncontrol-v2 ; rm -rf logfile; sh complete.runner.sh 2>&1 | tee logfile" --zone=us-central1-c
