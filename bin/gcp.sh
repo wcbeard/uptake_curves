@@ -44,8 +44,9 @@ function gcstop {
 
 # gcloud beta compute --project "moz-fx-data-bq-data-science" ssh --zone "us-east1-b" "wbeard-uptake"
 
-# gcstart
-# gcssh
+gcstart
+sleep 10
+gcssh
 gcscp
 
 # sleep 10
