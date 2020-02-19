@@ -40,11 +40,11 @@ dependencies:
 - python-snappy
 
 # New
-- altair=4
+#- altair==4
+
 - pip
-#- pymc3
 - pip:
-  - "git+https://github.com/mozilla/dscontrib.git"
+  # - "git+https://github.com/mozilla/dscontrib.git"
   - autopep8
   - black
   - feather-format
@@ -61,6 +61,7 @@ dependencies:
   - ipdb
 
   # Jupyter stuff
+  - altair==4
   - altair_saver
   - selenium
 
