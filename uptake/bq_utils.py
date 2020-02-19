@@ -1,10 +1,11 @@
+import datetime as dt
 import os
 import re
 import subprocess
 import tempfile
 from functools import partial
 from os.path import abspath, exists, expanduser
-from typing import Iterable
+from typing import Iterable, Union
 
 from google.cloud import bigquery  # type: ignore
 from google.oauth2 import service_account  # type: ignore
@@ -27,7 +28,7 @@ def default_proj(proj):
     return proj
 
 
-def to_sql_date(d) -> str:
+def to_sql_date(d: Union[dt.date, dt.datetime, pd.Series]) -> str:
     return d.strftime(SUB_DATE)
 
 

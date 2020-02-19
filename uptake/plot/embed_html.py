@@ -75,7 +75,7 @@ def convert_np(o):
 def render_channel(win, mac, linux, channel, base_dir, sub_date: str):
     html = html_template.format(
         channel_header=channel.capitalize(),
-        sub_date=bq.to_sql_date(sub_date),
+        sub_date=sub_date,
         win_spec=json.dumps(win.to_dict(), default=convert_np),
         mac_spec=json.dumps(mac.to_dict(), default=convert_np),
         linux_spec=json.dumps(linux.to_dict(), default=convert_np),
