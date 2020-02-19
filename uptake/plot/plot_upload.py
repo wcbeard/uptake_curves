@@ -203,7 +203,7 @@ def main(
     if ret_df is None:
         return
     elif ret_df == "all":
-        return df_plottable_to_upload
+        return df_plottable
     elif ret_df == "upload":
         return df_plottable_to_upload
     else:

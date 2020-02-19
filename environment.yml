@@ -40,7 +40,7 @@ dependencies:
 - python-snappy
 
 # New
-- altair=3
+- altair=4
 - pip
 #- pymc3
 - pip:
