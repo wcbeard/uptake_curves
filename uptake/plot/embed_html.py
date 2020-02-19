@@ -10,7 +10,7 @@ import pandas as pd  # type: ignore
 import numpy as np  # type: ignore
 
 from uptake import proj_loc
-from uptake.plot.plot_upload import to_sql_date
+
 from uptake.plot import uptake_plots as up
 
 # import uptake.plot.uptake_plots as up
@@ -27,6 +27,7 @@ html_template = """
 
 <body>
   <h1>{channel_header}</h1>
+  <h2>{sub_date}</h2>
   <div>
     Go to:
     <a href="release.html">Release</a>
@@ -71,9 +72,10 @@ def convert_np(o):
     raise TypeError
 
 
-def render_channel(win, mac, linux, channel, base_dir):
+def render_channel(win, mac, linux, channel, base_dir, sub_date: str):
     html = html_template.format(
         channel_header=channel.capitalize(),
+        sub_date=bq.to_sql_date(sub_date),
         win_spec=json.dumps(win.to_dict(), default=convert_np),
         mac_spec=json.dumps(mac.to_dict(), default=convert_np),
         linux_spec=json.dumps(linux.to_dict(), default=convert_np),
@@ -137,7 +139,7 @@ def download_channel_plot(
         plot_table=plot_table,
         channel=channel,
         n_versions=n_versions,
-        max_sub_date=to_sql_date(sub_date),
+        max_sub_date=bq.to_sql_date(sub_date),
     )
     return bq_read(q).assign(
         submission_date=lambda x: x.submission_date.pipe(rm_tz),
@@ -166,13 +168,14 @@ def dl_render_channel(
         df, A, min_date="2019-06-01", channel="release", separate=True
     )
 
-    out_dir = base_dir / to_sql_date(sub_date)
+    out_dir = base_dir / bq.to_sql_date(sub_date)
     render_channel(
         win=od["Windows_NT"],
         mac=od["Darwin"],
         linux=od["Linux"],
         channel=channel,
         base_dir=out_dir,
+        sub_date=bq.to_sql_date(sub_date),
     )
     return out_dir
 

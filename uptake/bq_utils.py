@@ -27,6 +27,10 @@ def default_proj(proj):
     return proj
 
 
+def to_sql_date(d) -> str:
+    return d.strftime(SUB_DATE)
+
+
 class BqLocation:
     def __init__(
         self,

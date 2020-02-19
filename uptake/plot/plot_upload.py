@@ -124,10 +124,6 @@ def format_all_channels_data(
     return df_plottable
 
 
-def to_sql_date(d):
-    return d.strftime(bq.SUB_DATE)
-
-
 def main(
     sub_date=None,
     dest_table="analysis.wbeard_uptake_plot_test",
@@ -146,7 +142,7 @@ def main(
         to return nothing.
     """
     date = pd.to_datetime(sub_date) if sub_date else dt.datetime.today()
-    months_ago11 = to_sql_date(
+    months_ago11 = bq.to_sql_date(
         pd.to_datetime(date) - pd.Timedelta(days=11 * 30)
     )
     prod_details = rd.read_product_details_all()
@@ -158,14 +154,14 @@ def main(
     dfc = bq_read(
         f"""select * from {src_table}
             where submission_date >= '{months_ago11}'
-                and submission_date <= '{to_sql_date(date)}'
+                and submission_date <= '{bq.to_sql_date(date)}'
             """
     )
     dfr, dfb, dfn = process_raw_channel_counts(dfc, prod_details, beta_dates)
     df_plottable = format_all_channels_data(
         dfr, dfb, dfn, channels_months_ago=(7, 3, 3), sub_date=date
     )
-    show_dates = df_plottable.submission_date.map(to_sql_date)
+    show_dates = df_plottable.submission_date.map(bq.to_sql_date)
     print(
         f"""Data formatted for dates '{show_dates.min()}' - '{(
             show_dates.max())}' (before filtering)"""
@@ -177,7 +173,7 @@ def main(
         f"""
         select distinct submission_date as date
         from {dest_table}
-        where submission_date >= '{to_sql_date(
+        where submission_date >= '{bq.to_sql_date(
             df_plottable.submission_date.min()
         )}'
         """
@@ -192,7 +188,7 @@ def main(
             df_plottable_to_upload.submission_date
             .drop_duplicates()
             .sort_values()
-            .map(to_sql_date)
+            .map(bq.to_sql_date)
             .tolist()
         )}"""
     )
