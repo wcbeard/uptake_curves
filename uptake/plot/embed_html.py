@@ -230,6 +230,7 @@ def main(
         today_dir = str(html_dir / "today")
         print(f"Copying from {out_dir} to {today_dir}")
         copy_tree(out_dir, today_dir)
+    return str(out_dir)
 
 
 if __name__ == "__main__":
