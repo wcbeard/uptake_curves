@@ -2,6 +2,7 @@ import datetime as dt
 from distutils.dir_util import copy_tree
 import json
 from pathlib import Path
+import subprocess
 from typing import Tuple
 
 import altair as A  # type: ignore
@@ -28,6 +29,7 @@ html_template = """
 <body>
   <h1>{channel_header}</h1>
   <h2>{sub_date}</h2>
+  <em> Generated {datetime} </em>
   <div>
     Go to:
     <a href="release.html">Release</a>
@@ -79,6 +81,7 @@ def render_channel(win, mac, linux, channel, base_dir, sub_date: str):
         win_spec=json.dumps(win.to_dict(), default=convert_np),
         mac_spec=json.dumps(mac.to_dict(), default=convert_np),
         linux_spec=json.dumps(linux.to_dict(), default=convert_np),
+        datetime=subprocess.check_output("date").strip(),
     )
     out = base_dir / f"{channel}.html"
     if not base_dir.exists():
