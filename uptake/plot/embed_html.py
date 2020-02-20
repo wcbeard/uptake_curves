@@ -81,7 +81,7 @@ def render_channel(win, mac, linux, channel, base_dir, sub_date: str):
         win_spec=json.dumps(win.to_dict(), default=convert_np),
         mac_spec=json.dumps(mac.to_dict(), default=convert_np),
         linux_spec=json.dumps(linux.to_dict(), default=convert_np),
-        datetime=subprocess.check_output("date").strip(),
+        datetime=subprocess.check_output("date").decode().strip(),
     )
     out = base_dir / f"{channel}.html"
     if not base_dir.exists():
