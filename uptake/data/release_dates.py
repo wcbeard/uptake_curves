@@ -2,7 +2,7 @@ import datetime as dt
 import re
 
 import pandas as pd  # type: ignore
-# import buildhub_utils as bh
+
 import uptake.data.buildhub_utils as bh  # type: ignore
 from requests import get
 
@@ -17,6 +17,18 @@ def pull_bh_data_beta(min_build_date):
     return bh.version2df(beta_docs, keep_rc=False, keep_release=True).assign(
         chan="beta"
     )
+
+
+def pull_bh_data_dev(min_build_date):
+    beta_docs = bh.pull_build_id_docs(
+        min_build_day=min_build_date, channel="aurora"
+    )
+    df = (
+        bh.version2df(beta_docs, keep_rc=True, keep_release=True)
+        .assign(chan="aurora")
+        .rename(columns={"pub_date": "date", "disp_vers": "version"})
+    )
+    return df[["version", "build_id", "date", "chan"]]
 
 
 def pull_bh_data_rls(min_build_date):
@@ -39,7 +51,9 @@ def pull_bh_data_rls(min_build_date):
         .assign(chan="release", major=lambda x: x.disp_vers.map(major))
         .assign(is_major=lambda x: x.major.notnull())
     )
-    return df
+    return df[
+        ["disp_vers", "build_id", "pub_date", "chan", "major", "is_major"]
+    ]
 
 
 ###################
@@ -117,7 +131,9 @@ def is_rc(v):
     return "b" not in v
 
 
-def get_beta_release_dates(min_build_date="2019", min_pd_date="2019-01-01"):
+def get_beta_release_dates(
+    min_build_date="2019", min_pd_date="2019-01-01"
+) -> pd.DataFrame:
     """
     Stitch together product details and buildhub
     (for rc builds).
@@ -148,7 +164,7 @@ def get_beta_release_dates(min_build_date="2019", min_pd_date="2019-01-01"):
         .assign(date=lambda x: pd.to_datetime(x.date.dt.date))
         # .astype(str)
     )
-    return beta_release_dates
+    return beta_release_dates[["date", "version", "src", "maj_vers"]]
 
 
 def latest_n_release_beta(beta_release_dates, sub_date, n_releases: int = 1):
