@@ -92,7 +92,7 @@ def render_channel(win, mac, linux, channel, base_dir, sub_date: str):
 
 templ_sql_rank = """with base as (
 select *
-from `{plot_table}` u
+from {plot_table} u
 where channel = '{channel}'
     and submission_date < '{max_sub_date}'
 )
@@ -135,11 +135,14 @@ def download_channel_plot(
     sub_date: dt.date,
     n_versions,
     bq_read,
+    project_id,
     plot_table="analysis.wbeard_uptake_plot_test",
 ):
-
+    src_loc = bq.BqLocation.from_dataset_table(
+        plot_table, project_id=project_id
+    )
     q = templ_sql_rank.format(
-        plot_table=plot_table,
+        plot_table=src_loc.sql,
         channel=channel,
         n_versions=n_versions,
         max_sub_date=bq.to_sql_date(sub_date),
@@ -157,6 +160,7 @@ def dl_render_channel(
     sub_date: dt.date,
     bq_read,
     n_versions,
+    project_id,
     plot_table="analysis.wbeard_uptake_plot_test",
     base_dir=json_base,
 ):
@@ -165,10 +169,11 @@ def dl_render_channel(
         sub_date,
         n_versions=n_versions,
         bq_read=bq_read,
+        project_id=project_id,
         plot_table=plot_table,
     )
     od = up.generate_channel_plot(
-        df, A, min_date="2019-06-01", channel="release", separate=True
+        df, A, min_date="2019-06-01", channel=channel, separate=True
     )
 
     out_dir = base_dir / bq.to_sql_date(sub_date)
@@ -186,14 +191,19 @@ def dl_render_channel(
 def main(
     sub_date=None,
     plot_table="analysis.wbeard_uptake_plot_test",
-    # project_id="moz-fx-data-derived-datasets",
+    project_id="moz-fx-data-derived-datasets",
     cache=True,
     creds_loc=None,
     html_dir=None,
-    release_beta_nightly_n_versions: Tuple[int, int, int] = (20, 30, 40),
+    release_beta_dev_nightly_n_versions: Tuple[int, int, int, int] = (
+        20,
+        30,
+        30,
+        40,
+    ),
 ):
     """
-    release_beta_nightly_n_versions: Number of recent releases to pull for
+    release_beta_dev_nightly_n_versions: Number of recent releases to pull for
     release, beta, and nightly channels, respectively.
     """
     if sub_date is None:
@@ -202,10 +212,11 @@ def main(
         sub_date = pd.to_datetime(sub_date).date()
     bq_read = bq.mk_bq_reader(cache=cache)
     html_dir = json_base if html_dir is None else Path(html_dir)
-    channels_n_versions = iter(release_beta_nightly_n_versions)
+    channels_n_versions = iter(release_beta_dev_nightly_n_versions)
 
     print(f"html_dir: {html_dir}")
     dl_render_channel(
+        project_id=project_id,
         channel="release",
         sub_date=sub_date,
         bq_read=bq_read,
@@ -215,6 +226,7 @@ def main(
     )
 
     dl_render_channel(
+        project_id=project_id,
         channel="beta",
         sub_date=sub_date,
         bq_read=bq_read,
@@ -223,7 +235,18 @@ def main(
         base_dir=html_dir,
     )
 
+    dl_render_channel(
+        project_id=project_id,
+        channel="aurora",
+        sub_date=sub_date,
+        bq_read=bq_read,
+        n_versions=next(channels_n_versions),
+        plot_table=plot_table,
+        base_dir=html_dir,
+    )
+
     out_dir = dl_render_channel(
+        project_id=project_id,
         channel="nightly",
         sub_date=sub_date,
         bq_read=bq_read,
