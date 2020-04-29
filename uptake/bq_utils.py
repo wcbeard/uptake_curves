@@ -62,6 +62,11 @@ class BqLocation:
     def __repr__(self):
         return f"BqLocation[{self.cli}]"
 
+    @classmethod
+    def from_dataset_table(self, dataset_table, project_id=None):
+        dataset, table = dataset_table.split(".")
+        return self(table, dataset=dataset, project_id=project_id)
+
 
 def get_creds(creds_loc=None):
     if creds_loc:
