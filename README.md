@@ -3,54 +3,47 @@ uptake_curves
 
 Dashboard to compare update curves for new versions
 
-Project Organization
-------------
+# High level pipeline
+* hala (via crontab) starts a gcp instance
+* this pulls summary stats from clients_daily, uploads to an intermediate table under `moz-fx-data-bq-data-science`
+* another routine pulls the summary stats, transforms to more 'plottable' data, uploads to 2nd intermediate table
+* another routine pulls from this table, generates an altair plot, embeds in an html template
+* hala scp's the html file to its own data directory
 
-    ├── LICENSE
-    ├── Makefile           <- Makefile with commands like `make data` or `make train`
-    ├── README.md          <- The top-level README for developers using this project.
-    ├── data
-    │   ├── external       <- Data from third party sources.
-    │   ├── interim        <- Intermediate data that has been transformed.
-    │   ├── processed      <- The final, canonical data sets for modeling.
-    │   └── raw            <- The original, immutable data dump.
-    │
-    ├── docs               <- A default Sphinx project; see sphinx-doc.org for details
-    │
-    ├── models             <- Trained and serialized models, model predictions, or model summaries
-    │
-    ├── notebooks          <- Jupyter notebooks. Naming convention is a number (for ordering),
-    │                         the creator's initials, and a short `-` delimited description, e.g.
-    │                         `1.0-jqp-initial-data-exploration`.
-    │
-    ├── references         <- Data dictionaries, manuals, and all other explanatory materials.
-    │
-    ├── reports            <- Generated analysis as HTML, PDF, LaTeX, etc.
-    │   └── figures        <- Generated graphics and figures to be used in reporting
-    │
-    ├── requirements.txt   <- The requirements file for reproducing the analysis environment, e.g.
-    │                         generated with `pip freeze > requirements.txt`
-    │
-    ├── src                <- Source code for use in this project.
-    │   ├── __init__.py    <- Makes src a Python module
-    │   │
-    │   ├── data           <- Scripts to download or generate data
-    │   │   └── make_dataset.py
-    │   │
-    │   ├── features       <- Scripts to turn raw data into features for modeling
-    │   │   └── build_features.py
-    │   │
-    │   ├── models         <- Scripts to train models and then use trained models to make
-    │   │   │                 predictions
-    │   │   ├── predict_model.py
-    │   │   └── train_model.py
-    │   │
-    │   └── visualization  <- Scripts to create exploratory and results oriented visualizations
-    │       └── visualize.py
-    │
-    └── tox.ini            <- tox file with settings for running tox; see tox.testrun.org
+https://metrics.mozilla.com/protected/wbeard/uptake_curves/today/release.html
 
 
---------
 
-<p><small>Project based on the <a target="_blank" href="https://drivendata.github.io/cookiecutter-data-science/">cookiecutter data science project template</a>. #cookiecutterdatascience</small></p>
+# Tables
+Data is written to 
+
+* raw summary date: `moz-fx-data-bq-data-science.wbeard.uptake_version_counts`
+* more directly plottable data: `moz-fx-data-bq-data-science.wbeard.uptake_plot_data`
+
+Data is plotted from `embed_html.py` by directly downloading from the latter
+table.
+
+
+
+
+# Hala
+## code
+- in `/home/wbeard/repos/uptake_curves`
+- using master branch
+- script that calls it is `/home/wbeard/repos/uptake_curves/bin/gcp_prod.sh`
+    - similar to `gcp.sh`
+    - this calls `bin/upload_plot.sh` from within a spun up GCP VM
+    - scp output to `/home/wbeard/wbeard-prot/uptake_curves/today/`
+
+## upload_plot.sh
+runs
+- `uptake/upload_bq.py`
+- `uptake/plot/plot_upload.py`
+- `uptake/plot/embed_html.py`
+
+
+
+
+# Workflows
+## On update pipeline
+
