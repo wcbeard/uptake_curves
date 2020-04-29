@@ -35,6 +35,7 @@ html_template = """
     <a href="release.html">Release</a>
     <a href="beta.html">Beta</a>
     <a href="nightly.html">Nightly</a>
+    <a href="aurora.html">DevEdition</a>
   </div>
 
   <div id="win"></div>
