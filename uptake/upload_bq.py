@@ -66,7 +66,7 @@ def main(
     sub_date_start: Optional[str] = None,
     sub_date_end: Union[str, int] = 1,
     dataset="wbeard",
-    project_id=bq.default_proj("moz-fx-data-derived-datasets"),
+    project_id=None,
     add_schema=False,
     drop_first=False,
     cache=True,
@@ -78,7 +78,9 @@ def main(
     if `sub_date_start` is None, look up the most recently missing date
     that has already been uploaded.
     """
+    project_id = bq.replace_none_proj(project_id)
     bq_loc = BqLocation(table_name, dataset, project_id=project_id)
+
     bq_read = mk_bq_reader(cache=cache)
     if sub_date_start is None:
         sub_date_start = get_latest_missing_date(bq_loc)
