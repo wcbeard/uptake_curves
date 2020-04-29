@@ -696,6 +696,9 @@ eht.main(
     html_dir='../reports/html_test/',)
 
 # %%
+wbeard_uptake_plot_data
+
+# %%
 eht.main(
     sub_date=None,
     plot_table=wbeard_uptake_plot_data,
