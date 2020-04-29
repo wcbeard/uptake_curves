@@ -1,4 +1,8 @@
-winq = """
+from typing import Optional
+
+SUB_DATE = str
+
+_winq = """
 SELECT
   c.submission_date
   , c.app_version
@@ -20,7 +24,7 @@ group by 1, 2
 """
 
 
-allq = """
+_allq = """
 SELECT
   c.submission_date
   , c.channel as chan
@@ -45,7 +49,7 @@ group by 1, 2, 3, 4, 5, 6
 """
 
 
-def pull_min(day1, day_end=None):
+def pull_min(day1: SUB_DATE, day_end: Optional[SUB_DATE] = None):
     day_end = day_end or day1
     allq_min = """
     CREATE TEMP FUNCTION build_date_lag_days(chan string, os string) AS (
@@ -70,27 +74,35 @@ def pull_min(day1, day_end=None):
                   interval build_date_lag_days(chan, os) + offset day))
     );
 
+    with day_base as (
+      select
+        *
+      from `moz-fx-data-derived-datasets.telemetry.clients_daily` c
+      where submission_date between '{day1}' and '{day_end}'
+        and c.app_name = 'Firefox'
+        and os in ('Windows_NT', 'Darwin', 'Linux')
+    )
 
-    with aggs_base as (
+    , sampled_base as (
+      select * from day_base where normalized_channel = 'release' and sample_id = 1
+      union all select * from day_base where normalized_channel in ('esr') and sample_id <= 25
+      union all select * from day_base where normalized_channel in ('beta') and sample_id <= 50
+      union all select * from day_base where normalized_channel in ('aurora', 'nightly')
+    )
+
+    , aggs_base as (
     SELECT
       c.submission_date
-      , c.channel as chan
+      , c.normalized_channel as chan
       , c.os
       , c.app_version as vers
       , if(
-           app_build_id < min_build_id(channel, os, submission_date),
-           min_build_id(channel, os, submission_date),
+           app_build_id < min_build_id(normalized_channel, os, submission_date),
+           min_build_id(normalized_channel, os, submission_date),
            app_build_id) as bid
       , c.app_display_version as dvers
       , count(*) as n
-    from `moz-fx-data-derived-datasets.telemetry.clients_daily` c
-    where (
-           (submission_date between '{day1}' and '{day_end}')
-          )
-          and sample_id = 1
-          and os in ('Windows_NT', 'Darwin', 'Linux')
-          and c.channel in ('release', 'beta', 'nightly', 'esr')
-          and c.app_name = 'Firefox'
+    from sampled_base c
     group by 1, 2, 3, 4, 5, 6
     )
 

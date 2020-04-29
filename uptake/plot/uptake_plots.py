@@ -151,6 +151,8 @@ def format_os_df_plot(os_df, pub_date_col="pub_date", channel="release"):
         pdf = pdf.assign(is_major=lambda x: is_major(x.vers))
     elif channel == "beta":
         pdf = pdf.assign(RC=lambda x: x.vers.map(rd.is_rc))
+    elif channel == "aurora":
+        pass
     elif channel == "nightly":
         pdf = pdf.assign(
             dvers=lambda x: x.vers.map(map_nightly_vers2dvers(vers_df))
@@ -250,13 +252,8 @@ def os_plot_base_release(
                 domain=[True, False], range=["square", "triangle-up"]
             ),
         )
-        version_opacity = A.Opacity(
-            "latest_vers:O", scale=A.Scale(domain=[True, False], range=[1, 0.6])
-        )
-    elif channel == "nightly":
+    elif channel in ("nightly", "aurora"):
         major_shape = A.Undefined
-        # major_shape = A.Shape('dvers:O')
-        version_opacity = A.Undefined
     else:
         raise NotImplementedError(f"channel `{channel}` not yet implemented.")
 
@@ -282,7 +279,6 @@ def os_plot_base_release(
                 scale=xscale,
             ),
             y=A.Y("n_pct", axis=A.Axis(format="%", title="Percent uptake")),
-            # strokeOpacity=version_opacity,
             # shape=major_shape,
             color="vers:O",
             tooltip=[
@@ -296,7 +292,6 @@ def os_plot_base_release(
         )
     )
     # encoding issue https://stackoverflow.com/q/59652075/386279
-    h.encoding.strokeOpacity = version_opacity
     h.encoding.shape = major_shape
 
     if channel == "nightly":
@@ -330,50 +325,13 @@ def os_plot_base_release(
 ###########################
 # Per Channel combination #
 ###########################
-def generate_channel_plot_full(
-    df, A, min_date="2019-10-01", channel="release", separate=False
-):
-    channel_release_disp_days = dict(release=30, beta=10, nightly=7)
-    max_days_post_pub = channel_release_disp_days[channel]
-
-    od = OrderedDict()
-    for os in ("Windows_NT", "Darwin", "Linux"):
-        osdf = df.query("os == @os")
-        pdf = (
-            format_os_df_plot(osdf, pub_date_col="rls_date", channel=channel)
-            .query(f"submission_date > '{min_date}'")
-            .assign(os=os)
-            .query("nth_recent_release == nth_recent_release")
-        )
-        ch = (
-            os_plot_base_release(
-                pdf,
-                color="vers:O",
-                separate=False,
-                A=A,
-                channel=channel,
-                max_days_post_pub=max_days_post_pub,
-            )
-            .properties(height=500, width=700, title=f"OS = {os}")
-            .interactive()
-        )
-        od[os] = ch
-    if separate:
-        return od
-    return (
-        A.concat(*od.values())
-        .resolve_scale(color="independent")
-        .resolve_axis(y="shared")
-    )
-
-
 def generate_channel_plot(
     df, A, min_date="2019-10-01", channel="release", separate=False
 ):
     """
     Creates channel plot from data already uploaded to `plot_upload`.
     """
-    channel_release_disp_days = dict(release=30, beta=10, nightly=7)
+    channel_release_disp_days = dict(release=30, beta=10, nightly=7, aurora=10)
     max_days_post_pub = channel_release_disp_days[channel]
 
     od = OrderedDict()

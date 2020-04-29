@@ -16,10 +16,15 @@ import pandas as pd  # type: ignore
 from pandas import Series
 
 SUB_DATE = "%Y-%m-%d"
+DEFAULT_PROJ = "moz-fx-data-derived-datasets"
+PROD_PROJ_ID = "moz-fx-data-bq-data-science"
 
 
-def default_proj(proj):
+def replace_none_proj(proj, default_proj=DEFAULT_PROJ):
+    if proj is not None:
+        return proj
     env_proj = os.environ.get("BQ_PROJ")
+    proj = default_proj
     if env_proj:
         print(f"Using project {env_proj}")
         return env_proj
@@ -33,15 +38,10 @@ def to_sql_date(d: Union[dt.date, dt.datetime, pd.Series]) -> str:
 
 
 class BqLocation:
-    def __init__(
-        self,
-        table,
-        dataset="wbeard",
-        project_id=default_proj("moz-fx-data-derived-datasets"),
-    ):
+    def __init__(self, table, dataset="wbeard", project_id=None):
         self.table = table
         self.dataset = dataset
-        self.project_id = project_id
+        self.project_id = replace_none_proj(project_id)
 
     @property
     def sql(self):
@@ -62,6 +62,11 @@ class BqLocation:
     def __repr__(self):
         return f"BqLocation[{self.cli}]"
 
+    @classmethod
+    def from_dataset_table(self, dataset_table, project_id=None):
+        dataset, table = dataset_table.split(".")
+        return self(table, dataset=dataset, project_id=project_id)
+
 
 def get_creds(creds_loc=None):
     if creds_loc:
@@ -73,16 +78,17 @@ def get_creds(creds_loc=None):
     return creds
 
 
-def mk_bq_reader(creds_loc=None, cache=False):
+def mk_bq_reader(creds_loc=None, cache=False, project_id=None):
     """
     Returns function that takes a BQ sql query and
     returns a pandas dataframe
     """
     creds = get_creds(creds_loc=creds_loc)
+    project_id = replace_none_proj(project_id)
 
     bq_read = partial(
         pd.read_gbq,
-        project_id=default_proj("moz-fx-data-derived-datasets"),
+        project_id=project_id,
         credentials=creds,
         dialect="standard",
     )
@@ -108,16 +114,15 @@ def cache_reader(bq_read):
     return bq_read_cache
 
 
-def mk_query_func(creds_loc=None):
+def mk_query_func(creds_loc=None, project_id=None):
     """
     This function will block until the job is done...and
     take a while if a lot of queries are repeatedly made.
     """
     creds = get_creds(creds_loc=creds_loc)
 
-    client = bigquery.Client(
-        project=default_proj(creds.project_id), credentials=creds
-    )
+    project_id = replace_none_proj(project_id, default_proj=creds.project_id)
+    client = bigquery.Client(project=project_id, credentials=creds)
 
     def blocking_query(*a, **k):
         job = client.query(*a, **k)
@@ -129,11 +134,10 @@ def mk_query_func(creds_loc=None):
     return blocking_query
 
 
-def mk_query_func_async(creds_loc=None):
+def mk_query_func_async(creds_loc=None, project_id=None):
     creds = get_creds(creds_loc=creds_loc)
-    client = bigquery.Client(
-        project=default_proj(creds.project_id), credentials=creds
-    )
+    project_id = replace_none_proj(project_id, default_proj=creds.project_id)
+    client = bigquery.Client(project=project_id, credentials=creds)
     return client.query
 
 
@@ -174,7 +178,7 @@ def upload(df, loc: BqLocation, add_schema=False):
         "load",
         "--noreplace",
         "--project_id",
-        "moz-fx-data-bq-data-science",
+        PROD_PROJ_ID,
         "--source_format",
         "CSV",
         "--skip_leading_rows",

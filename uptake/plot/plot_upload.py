@@ -1,4 +1,5 @@
 import datetime as dt
+from textwrap import dedent
 
 import fire  # type: ignore
 import pandas as pd  # type: ignore
@@ -30,6 +31,7 @@ of data for a channel-specific `n`.
 
 
 def process_raw_channel_counts(dfc, prod_details, beta_dates):
+    # Release
     pd_rls = prod_details.query(
         "date > '2019' & category in ('major', 'stability')"
     ).pipe(lambda x: x[~x["release_label"].str.endswith("esr")])
@@ -37,6 +39,7 @@ def process_raw_channel_counts(dfc, prod_details, beta_dates):
     dfcr = dfc.query("chan == 'release'").copy()
     dfcr = up.combine_uptake_dates_release(dfcr, pd_rls, vers_col="dvers")
 
+    # Beta
     beta_dates = rd.get_beta_release_dates(
         min_build_date="2019", min_pd_date="2019-01-01"
     )
@@ -47,6 +50,16 @@ def process_raw_channel_counts(dfc, prod_details, beta_dates):
         .rename(columns={"dvers": "vers"})
     )
 
+    # DevEdition
+    dev_dates = rd.pull_bh_data_dev(min_build_date="2019")
+    dfc_dev = dfc.query("chan == 'aurora'").copy()
+    dfc_dev = (
+        up.combine_uptake_dates_release(dfc_dev, dev_dates, vers_col="dvers")
+        .drop("vers", axis=1)
+        .rename(columns={"dvers": "vers"})
+    )
+
+    # Nightly
     dfcn = (
         dfc.query("chan == 'nightly'")
         .copy()
@@ -55,7 +68,7 @@ def process_raw_channel_counts(dfc, prod_details, beta_dates):
         .drop("vers", axis=1)
         .rename(columns={"build_day": "vers"})
     )
-    return dfcr, dfcb, dfcn
+    return dfcr, dfcb, dfc_dev, dfcn
 
 
 def format_channel_data(
@@ -93,8 +106,20 @@ def format_channel_data(
 
 
 def format_all_channels_data(
-    dfr, dfb, dfn, channels_months_ago=(7, 3, 3), sub_date: dt.datetime = None
+    dfr,
+    dfb,
+    dfdev,
+    dfn,
+    channels_months_ago=(7, 3, 3),
+    sub_date: dt.datetime = None,
 ):
+    """
+    channels_months_ago: tuple of (release, beta, nightly) number of months to
+    pull
+
+    DevEdition just uses the Beta time period.
+    """
+
     def get_min_date(months_ago):
         return (sub_date - pd.Timedelta(days=30 * months_ago)).strftime(
             bq.SUB_DATE
@@ -108,6 +133,9 @@ def format_all_channels_data(
                     dfr, min_date=r_min_date, channel="release"
                 ),
                 format_channel_data(dfb, min_date=b_min_date, channel="beta"),
+                format_channel_data(
+                    dfdev, min_date=b_min_date, channel="aurora"
+                ),
                 format_channel_data(
                     dfn, min_date=n_min_date, channel="nightly"
                 ),
@@ -129,9 +157,11 @@ def main(
     dest_table="analysis.wbeard_uptake_plot_test",
     src_table="analysis.wbeard_uptake_vers",
     project_id="moz-fx-data-derived-datasets",
+    src_project_id="moz-fx-data-derived-datasets",
     cache=False,
     creds_loc=None,
     ret_df="all",
+    dest_table_exists=True,
 ):
     """
     sub_date: 'YYYY-mm-dd' or None. If None, then use today.
@@ -151,16 +181,27 @@ def main(
     )
     creds = bq.get_creds(creds_loc=creds_loc)
     bq_read = bq.mk_bq_reader(creds_loc=creds_loc, cache=cache)
-    dfc = bq_read(
-        f"""select * from {src_table}
-            where submission_date >= '{months_ago11}'
-                and submission_date <= '{bq.to_sql_date(date)}'
-            """
+
+    def gen_src_query():
+        src_loc = bq.BqLocation.from_dataset_table(
+            src_table, project_id=src_project_id
+        )
+        sql = f"""select * from {src_loc.sql}
+        where submission_date >= '{months_ago11}'
+            and submission_date <= '{bq.to_sql_date(date)}'
+        """
+        return dedent(sql)
+
+    src_sql = gen_src_query()
+    dfc = bq_read(src_sql)
+
+    dfr, dfb, dfdev, dfn = process_raw_channel_counts(
+        dfc, prod_details, beta_dates
     )
-    dfr, dfb, dfn = process_raw_channel_counts(dfc, prod_details, beta_dates)
     df_plottable = format_all_channels_data(
-        dfr, dfb, dfn, channels_months_ago=(7, 3, 3), sub_date=date
+        dfr, dfb, dfdev, dfn, channels_months_ago=(7, 3, 3), sub_date=date
     )
+
     show_dates = df_plottable.submission_date.map(bq.to_sql_date)
     print(
         f"""Data formatted for dates '{show_dates.min()}' - '{(
@@ -169,19 +210,24 @@ def main(
 
     # Find dates that have already been uploaded. Filter out rows in
     # df_plottable with these dates.
+    bq_loc_dest = bq.BqLocation.from_dataset_table(dest_table, project_id)
     q = (
         f"""
         select distinct submission_date as date
-        from {dest_table}
+        from {bq_loc_dest.sql}
         where submission_date >= '{bq.to_sql_date(
             df_plottable.submission_date.min()
         )}'
         """
     )
-    distinct_existing_dates = bq_read(q).date.dt.tz_localize(None)
-    df_plottable_to_upload = df_plottable.pipe(
-        lambda x: x[~x.submission_date.isin(distinct_existing_dates)]
-    )
+
+    if dest_table_exists:
+        distinct_existing_dates = bq_read(q).date.dt.tz_localize(None)
+        df_plottable_to_upload = df_plottable.pipe(
+            lambda x: x[~x.submission_date.isin(distinct_existing_dates)]
+        )
+    else:
+        df_plottable_to_upload = df_plottable
 
     print(
         f"""Uploading data for dates:\n{(
